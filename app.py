@@ -17,7 +17,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, urlunparse
 import trafilatura
 
-# ✅ HA 爬蟲（新增）
+# ✅ HA 爬蟲
 from crawler.ha_press_spider import run_ha_crawl
 
 # ==========================================================
@@ -60,14 +60,13 @@ MODEL_NAME = "deepseek-chat"
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ✅ SWD 資料夾（原本）
+# ✅ SWD 資料夾
 CRAWLER_DIR = os.path.join(BASE_DIR, "crawler", "swd_press")
-
-# ✅ HA 資料夾（新增：每篇 bilingual json 直接放這）
+# ✅ HA 資料夾
 HA_CRAWLER_DIR = os.path.join(BASE_DIR, "crawler", "ha_press")
 
 # ✅ PostgreSQL 連接設定
-DATABASE_URL = os.getenv("DATABASE_URL")  # Render 提供的資料庫 URL
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # ✅ 全域進度資訊（文章生成）
 progress_data = {
@@ -78,7 +77,7 @@ progress_data = {
     "titles": []
 }
 
-# ✅ SWD 爬虫进度资讯（原本）
+# ✅ SWD 爬虫进度资讯
 crawl_progress = {
     "total": 0,
     "completed": 0,
@@ -87,7 +86,7 @@ crawl_progress = {
     "message": ""
 }
 
-# ✅ HA 爬虫进度资讯（新增）
+# ✅ HA 爬虫进度资讯
 ha_crawl_progress = {
     "total": 0,
     "completed": 0,
@@ -97,8 +96,16 @@ ha_crawl_progress = {
 }
 
 # ✅ 全域變數儲存 Prompts
-# 格式：{timestamp: [{"keyword": "xxx", "prompt": {"zh": "...", "en": "..."}, ...}, ...]}
 generated_prompts = {}
+
+# ==========================================================
+# ✅ Keywords cache（新增）
+# ==========================================================
+keywords_cache = {
+    "swd": {"keywords": [], "updated_at": "", "error": ""},
+    "ha": {"keywords": [], "updated_at": "", "error": ""},
+}
+keywords_cache_lock = threading.Lock()
 
 
 # ==========================================================
@@ -128,7 +135,6 @@ def init_database():
     try:
         cur = conn.cursor()
 
-        # 基礎表（舊結構）
         cur.execute("""
             CREATE TABLE IF NOT EXISTS articles (
                 id SERIAL PRIMARY KEY,
@@ -142,7 +148,6 @@ def init_database():
             )
         """)
 
-        # ✅ 新增雙語欄位（若不存在）
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS title_zh VARCHAR(500)")
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS title_en VARCHAR(500)")
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS body_zh TEXT")
@@ -176,7 +181,6 @@ def ensure_database_initialized():
 
     try:
         cur = conn.cursor()
-        # 檢查表是否存在
         cur.execute("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
@@ -192,7 +196,6 @@ def ensure_database_initialized():
             init_database()
             return True
 
-        # 表存在也順便做一次升級（補欄位）
         init_database()
         return True
 
@@ -242,7 +245,7 @@ def call_deepseek(prompt_text: str):
 
 
 # ==========================================================
-# ✅ Source helpers（新增）
+# ✅ Source helpers
 # ==========================================================
 def normalize_source(source: str) -> str:
     s = (source or "swd").strip().lower()
@@ -255,12 +258,12 @@ def get_source_dir(source: str) -> str:
 
 
 # ==========================================================
-# ✅ Helper：從 SWD JSON 取出 title/text 的中英版本（原本）
+# ✅ Helper：從 SWD JSON 取出 title/text 的中英版本
 # ==========================================================
 def pick_bilingual_fields(data: dict):
     """
     從 crawler/swd_press/*.json 取出 title/text 的中英版本
-    回傳：title_zh, title_en, text_zh, text_en（都為字串）
+    回傳：title_zh, title_en, text_zh, text_en
     """
     title = data.get("title", "")
     text = data.get("text", "")
@@ -283,9 +286,7 @@ def pick_bilingual_fields(data: dict):
 
 
 def make_reference_block_from_json(source: str, data: dict) -> str:
-    """
-    將 SWD 或 HA 的 JSON 轉成「中英並列 block」字串，供 DeepSeek prompt 使用。
-    """
+    """將 SWD 或 HA 的 JSON 轉成「中英並列 block」字串，供 DeepSeek prompt 使用。"""
     source = normalize_source(source)
 
     if source == "ha":
@@ -315,7 +316,6 @@ def make_reference_block_from_json(source: str, data: dict) -> str:
             parts.append(f"【EN｜{title or '(No English title)'}｜{published}】\n{en_text or '(No English content)'}")
         return "\n\n".join(parts).strip()
 
-    # swd
     title_zh, title_en, text_zh, text_en = pick_bilingual_fields(data)
     date_str = (data.get("date") or "").strip()
     parts = []
@@ -348,7 +348,6 @@ def get_recent_articles_text(source="swd", days=30):
     for fn in os.listdir(folder):
         if not fn.endswith(".json"):
             continue
-        # 排除 HA 產生的總表
         if fn == "press_releases_recent.json":
             continue
 
@@ -367,7 +366,6 @@ def get_recent_articles_text(source="swd", days=30):
         except Exception as e:
             print("⚠️ 讀取錯誤:", fn, e)
 
-    # 沒資料就放寬到 60 天（保持你原本行為）
     if not recent_blocks:
         cutoff = today - timedelta(days=60)
         for fn in os.listdir(folder):
@@ -391,9 +389,7 @@ def get_recent_articles_text(source="swd", days=30):
 
 
 def get_relevant_reference_blocks(source: str, keywords: list[str], days=30, limit=5) -> list[str]:
-    """
-    依關鍵詞找相關新聞，回傳最多 limit 個「中英並列 block」。
-    """
+    """依關鍵詞找相關新聞，回傳最多 limit 個「中英並列 block」。"""
     folder = get_source_dir(source)
     if not os.path.exists(folder):
         return []
@@ -406,7 +402,7 @@ def get_relevant_reference_blocks(source: str, keywords: list[str], days=30, lim
     today = datetime.date.today()
     cutoff = today - timedelta(days=days)
 
-    matched: list[tuple[str, str]] = []  # (date_str, block)
+    matched: list[tuple[str, str]] = []
 
     for fn in os.listdir(folder):
         if not fn.endswith(".json"):
@@ -426,8 +422,7 @@ def get_relevant_reference_blocks(source: str, keywords: list[str], days=30, lim
             if not block:
                 continue
 
-            haystack = block  # 直接用 block 作 match
-            if any(kw in haystack for kw in keywords):
+            if any(kw in block for kw in keywords):
                 matched.append((d.isoformat(), block))
 
         except Exception:
@@ -466,7 +461,30 @@ def extract_keywords_from_deepseek(summaries):
 
 
 # ==========================================================
-# ✅ 爬蟲：InfoGov 配對 + 中英合併輸出（SWD 原本）
+# ✅ Keywords cache helpers（新增）
+# ==========================================================
+def compute_and_store_keywords(source: str, days: int = 7) -> list[str]:
+    """重新計算某來源 keywords，並寫入 cache。"""
+    source = normalize_source(source)
+    try:
+        texts = get_recent_articles_text(source=source, days=days)
+        result = extract_keywords_from_deepseek(texts)
+        with keywords_cache_lock:
+            keywords_cache[source] = {
+                "keywords": result,
+                "updated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+                "error": ""
+            }
+        return result
+    except Exception as e:
+        with keywords_cache_lock:
+            keywords_cache[source]["error"] = str(e)
+            keywords_cache[source]["updated_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+        return ["（關鍵字更新失敗）"]
+
+
+# ==========================================================
+# ✅ SWD 爬蟲：InfoGov 配對 + 中英合併輸出
 # ==========================================================
 INFOGOV_HOST = "www.info.gov.hk"
 
@@ -641,6 +659,8 @@ def background_crawl_news():
                 "status": "completed",
                 "message": "沒有找到新聞資料"
             })
+            # ✅ 即使沒資料，也更新一次 keywords cache（會回傳「沒有近30天新聞稿資料」）
+            compute_and_store_keywords("swd", days=7)
             return
 
         visited_infogov = set()
@@ -757,6 +777,9 @@ def background_crawl_news():
             "message": f"✅ 完成！已輸出 {merged_count} 份中英對照 JSON（{last_year}-{current_year}年範圍內的 SWD 列表）。"
         })
 
+        # ✅ 爬完立刻更新 SWD keywords cache（供前端快速切換/自動刷新）
+        compute_and_store_keywords("swd", days=7)
+
     except Exception as e:
         crawl_progress.update({
             "running": False,
@@ -767,7 +790,7 @@ def background_crawl_news():
 
 
 # ==========================================================
-# ✅ HA 背景爬蟲（新增）
+# ✅ HA 背景爬蟲
 # ==========================================================
 def background_crawl_ha(days=30):
     global ha_crawl_progress
@@ -810,8 +833,11 @@ def background_crawl_ha(days=30):
         ha_crawl_progress.update({
             "running": False,
             "status": "completed",
-            "message": "✅ HA 爬蟲完成！頁面即將自動刷新..."
+            "message": "✅ HA 爬蟲完成！關鍵字將自動更新。"
         })
+
+        # ✅ 爬完立刻更新 HA keywords cache
+        compute_and_store_keywords("ha", days=7)
 
     except Exception as e:
         ha_crawl_progress.update({
@@ -866,9 +892,6 @@ def background_generate_articles(selected_keywords, timestamp, source="swd"):
             reference_content = fallback_content
             print(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（{source}，含中英）")
 
-        # -----------------------------
-        # ✅ Prompt（中文）
-        # -----------------------------
         prompt_zh = (
             "你是一位香港地區的專業內容寫作顧問與 SEO 專家。\n\n"
             "## 📋 任務說明\n"
@@ -1044,8 +1067,13 @@ def index():
 def keywords():
     source = normalize_source(request.args.get("source", "swd"))
 
-    texts = get_recent_articles_text(source=source, days=7)
-    result = extract_keywords_from_deepseek(texts)
+    # ✅ 先用 cache（沒有才計算）
+    with keywords_cache_lock:
+        cached = keywords_cache.get(source, {}) or {}
+        result = cached.get("keywords") or []
+
+    if not result:
+        result = compute_and_store_keywords(source=source, days=7)
 
     trend_topic = ""
     trends = None
@@ -1056,12 +1084,31 @@ def keywords():
 
     return render_template("keywords.html", keywords=result, trends=trends, trend_topic=trend_topic, source=source)
 
+
 @app.route("/keywords_json", methods=["GET"])
 def keywords_json():
     source = normalize_source(request.args.get("source", "swd"))
-    texts = get_recent_articles_text(source=source, days=7)
-    result = extract_keywords_from_deepseek(texts)
-    return jsonify({"source": source, "keywords": result})
+    force = (request.args.get("force", "0") == "1")
+
+    with keywords_cache_lock:
+        cached = keywords_cache.get(source, {}) or {}
+        cached_keywords = cached.get("keywords") or []
+        updated_at = cached.get("updated_at") or ""
+        error = cached.get("error") or ""
+
+    if force or not cached_keywords:
+        cached_keywords = compute_and_store_keywords(source=source, days=7)
+        with keywords_cache_lock:
+            updated_at = keywords_cache[source].get("updated_at") or ""
+            error = keywords_cache[source].get("error") or ""
+
+    return jsonify({
+        "source": source,
+        "keywords": cached_keywords,
+        "updated_at": updated_at,
+        "error": error
+    })
+
 
 @app.route("/start_crawl", methods=["POST"])
 def start_crawl():
@@ -1267,7 +1314,7 @@ def view_article(article_id):
 
 
 # ==========================================================
-# ✅ 資料庫管理路由（用於手動初始化）
+# ✅ 資料庫管理路由
 # ==========================================================
 @app.route("/init_db")
 def manual_init_db():
