@@ -11,12 +11,14 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from crawler.ha_press_spider import run_ha_crawl
 
 # ========== 爬虫相关导入 ==========
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, urlunparse
 import trafilatura
+
+# ✅ HA 爬蟲（新增）
+from crawler.ha_press_spider import run_ha_crawl
 
 # ==========================================================
 # 初始化設定
@@ -56,9 +58,13 @@ API_KEY = os.getenv("DEEPSEEK_API_KEY")
 DEESEEK_API_URL = "https://api.deepseek.com/chat/completions"
 MODEL_NAME = "deepseek-chat"
 
-# ✅ 固定資料夾名稱為 swd_press（存放中英合併後 JSON）
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ✅ SWD 資料夾（原本）
 CRAWLER_DIR = os.path.join(BASE_DIR, "crawler", "swd_press")
+
+# ✅ HA 資料夾（新增：每篇 bilingual json 直接放這）
+HA_CRAWLER_DIR = os.path.join(BASE_DIR, "crawler", "ha_press")
 
 # ✅ PostgreSQL 連接設定
 DATABASE_URL = os.getenv("DATABASE_URL")  # Render 提供的資料庫 URL
@@ -72,8 +78,17 @@ progress_data = {
     "titles": []
 }
 
-# ✅ 爬虫进度资讯
+# ✅ SWD 爬虫进度资讯（原本）
 crawl_progress = {
+    "total": 0,
+    "completed": 0,
+    "running": False,
+    "status": "idle",
+    "message": ""
+}
+
+# ✅ HA 爬虫进度资讯（新增）
+ha_crawl_progress = {
     "total": 0,
     "completed": 0,
     "running": False,
@@ -211,7 +226,6 @@ def call_deepseek(prompt_text: str):
         "model": MODEL_NAME,
         "messages": [{"role": "user", "content": prompt_text}],
         "temperature": 0.7,
-        # ✅ 雙語輸出較長，建議提高 token（你可依 DeepSeek 限制再調整）
         "max_tokens": 3500
     }
     try:
@@ -228,7 +242,20 @@ def call_deepseek(prompt_text: str):
 
 
 # ==========================================================
-# ✅ Helper：從 crawler/swd_press/*.json 取出 title/text 的中英版本
+# ✅ Source helpers（新增）
+# ==========================================================
+def normalize_source(source: str) -> str:
+    s = (source or "swd").strip().lower()
+    return "ha" if s == "ha" else "swd"
+
+
+def get_source_dir(source: str) -> str:
+    s = normalize_source(source)
+    return HA_CRAWLER_DIR if s == "ha" else CRAWLER_DIR
+
+
+# ==========================================================
+# ✅ Helper：從 SWD JSON 取出 title/text 的中英版本（原本）
 # ==========================================================
 def pick_bilingual_fields(data: dict):
     """
@@ -242,7 +269,6 @@ def pick_bilingual_fields(data: dict):
         title_zh = (title.get("zh") or "").strip()
         title_en = (title.get("en") or "").strip()
     else:
-        # 舊格式：只有單語字串
         title_zh = (title or "").strip()
         title_en = ""
 
@@ -256,122 +282,159 @@ def pick_bilingual_fields(data: dict):
     return title_zh, title_en, text_zh, text_en
 
 
-# ==========================================================
-# 讀取最近新聞文本（回傳「中英並列 block」list，供 fallback 用）
-# ==========================================================
-def get_recent_articles_text(days=30):
+def make_reference_block_from_json(source: str, data: dict) -> str:
     """
-    獲取最近指定天數的新聞文本（以「中英並列」方式回傳）
-    回傳 list[str]，每一項包含 ZH/EN 兩段（若缺則略過）
+    將 SWD 或 HA 的 JSON 轉成「中英並列 block」字串，供 DeepSeek prompt 使用。
     """
-    if not os.path.exists(CRAWLER_DIR):
+    source = normalize_source(source)
+
+    if source == "ha":
+        title = (data.get("title") or "").strip()
+        published = (data.get("published") or "").strip()
+
+        paras = data.get("paragraphs") or []
+        zh_lines = []
+        en_lines = []
+        for p in paras:
+            if not isinstance(p, dict):
+                continue
+            z = (p.get("zh") or "").strip()
+            e = (p.get("en") or "").strip()
+            if z:
+                zh_lines.append(z)
+            if e:
+                en_lines.append(e)
+
+        zh_text = "\n".join(zh_lines).strip()
+        en_text = "\n".join(en_lines).strip()
+
+        parts = []
+        if title or zh_text:
+            parts.append(f"【ZH｜{title or '（無中文標題）'}｜{published}】\n{zh_text or '（無中文內文）'}")
+        if title or en_text:
+            parts.append(f"【EN｜{title or '(No English title)'}｜{published}】\n{en_text or '(No English content)'}")
+        return "\n\n".join(parts).strip()
+
+    # swd
+    title_zh, title_en, text_zh, text_en = pick_bilingual_fields(data)
+    date_str = (data.get("date") or "").strip()
+    parts = []
+    if title_zh or text_zh:
+        parts.append(f"【ZH｜{title_zh or '（無中文標題）'}｜{date_str}】\n{text_zh or '（無中文內文）'}")
+    if title_en or text_en:
+        parts.append(f"【EN｜{title_en or '(No English title)'}｜{date_str}】\n{text_en or '(No English content)'}")
+    return "\n\n".join(parts).strip()
+
+
+def parse_date_from_item(source: str, data: dict) -> datetime.date:
+    source = normalize_source(source)
+    if source == "ha":
+        return datetime.datetime.strptime(data["published"], "%Y-%m-%d").date()
+    return datetime.datetime.strptime(data["date"], "%Y-%m-%d").date()
+
+
+# ==========================================================
+# 讀取最近新聞文本（回傳「中英並列 block」list）
+# ==========================================================
+def get_recent_articles_text(source="swd", days=30):
+    folder = get_source_dir(source)
+    if not os.path.exists(folder):
         return []
 
     recent_blocks = []
     today = datetime.date.today()
     cutoff = today - timedelta(days=days)
 
-    for fn in os.listdir(CRAWLER_DIR):
+    for fn in os.listdir(folder):
         if not fn.endswith(".json"):
+            continue
+        # 排除 HA 產生的總表
+        if fn == "press_releases_recent.json":
             continue
 
         try:
-            with open(os.path.join(CRAWLER_DIR, fn), "r", encoding="utf-8") as f:
+            with open(os.path.join(folder, fn), "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            date = datetime.datetime.strptime(data["date"], "%Y-%m-%d").date()
-            if date < cutoff:
+            d = parse_date_from_item(source, data)
+            if d < cutoff:
                 continue
 
-            title_zh, title_en, text_zh, text_en = pick_bilingual_fields(data)
-
-            parts = []
-            if title_zh or text_zh:
-                parts.append(f"【ZH｜{title_zh or '（無中文標題）'}】\n{text_zh or '（無中文內文）'}")
-            if title_en or text_en:
-                parts.append(f"【EN｜{title_en or '(No English title)'}】\n{text_en or '(No English content)'}")
-
-            block = "\n\n".join(parts).strip()
+            block = make_reference_block_from_json(source, data)
             if block:
                 recent_blocks.append(block)
 
         except Exception as e:
             print("⚠️ 讀取錯誤:", fn, e)
 
-    # 如果沒有資料，嘗試讀取更早的（60天）
+    # 沒資料就放寬到 60 天（保持你原本行為）
     if not recent_blocks:
         cutoff = today - timedelta(days=60)
-        for fn in os.listdir(CRAWLER_DIR):
+        for fn in os.listdir(folder):
             if not fn.endswith(".json"):
                 continue
+            if fn == "press_releases_recent.json":
+                continue
             try:
-                with open(os.path.join(CRAWLER_DIR, fn), "r", encoding="utf-8") as f:
+                with open(os.path.join(folder, fn), "r", encoding="utf-8") as f:
                     data = json.load(f)
-
-                date = datetime.datetime.strptime(data["date"], "%Y-%m-%d").date()
-                if date < cutoff:
+                d = parse_date_from_item(source, data)
+                if d < cutoff:
                     continue
-
-                title_zh, title_en, text_zh, text_en = pick_bilingual_fields(data)
-
-                parts = []
-                if title_zh or text_zh:
-                    parts.append(f"【ZH｜{title_zh or '（無中文標題）'}】\n{text_zh or '（無中文內文）'}")
-                if title_en or text_en:
-                    parts.append(f"【EN｜{title_en or '(No English title)'}】\n{text_en or '(No English content)'}")
-
-                block = "\n\n".join(parts).strip()
+                block = make_reference_block_from_json(source, data)
                 if block:
                     recent_blocks.append(block)
-
             except Exception as e:
                 print("⚠️ 讀取錯誤:", fn, e)
 
     return recent_blocks
 
 
-# ==========================================================
-# ✅ 根據關鍵詞獲取相關新聞（回傳中英欄位，最多 5 篇）
-# ==========================================================
-def get_relevant_articles(keywords, days=30):
-    """根據關鍵詞篩選相關新聞（回傳中英並列資料）"""
-    if not os.path.exists(CRAWLER_DIR):
+def get_relevant_reference_blocks(source: str, keywords: list[str], days=30, limit=5) -> list[str]:
+    """
+    依關鍵詞找相關新聞，回傳最多 limit 個「中英並列 block」。
+    """
+    folder = get_source_dir(source)
+    if not os.path.exists(folder):
         return []
 
-    relevant = []
+    source = normalize_source(source)
+    keywords = [k for k in (keywords or []) if k and isinstance(k, str)]
+    if not keywords:
+        return []
+
     today = datetime.date.today()
     cutoff = today - timedelta(days=days)
 
-    for fn in os.listdir(CRAWLER_DIR):
+    matched: list[tuple[str, str]] = []  # (date_str, block)
+
+    for fn in os.listdir(folder):
         if not fn.endswith(".json"):
+            continue
+        if fn == "press_releases_recent.json":
             continue
 
         try:
-            with open(os.path.join(CRAWLER_DIR, fn), "r", encoding="utf-8") as f:
+            with open(os.path.join(folder, fn), "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            date = datetime.datetime.strptime(data["date"], "%Y-%m-%d").date()
-            if date < cutoff:
+            d = parse_date_from_item(source, data)
+            if d < cutoff:
                 continue
 
-            title_zh, title_en, text_zh, text_en = pick_bilingual_fields(data)
+            block = make_reference_block_from_json(source, data)
+            if not block:
+                continue
 
-            haystack = " ".join([title_zh, title_en, text_zh, text_en])
-
+            haystack = block  # 直接用 block 作 match
             if any(kw in haystack for kw in keywords):
-                relevant.append({
-                    "date": data.get("date", ""),
-                    "title_zh": title_zh,
-                    "title_en": title_en,
-                    "text_zh": text_zh,
-                    "text_en": text_en
-                })
+                matched.append((d.isoformat(), block))
 
         except Exception:
             continue
 
-    relevant.sort(key=lambda x: x.get("date", ""), reverse=True)
-    return relevant[:5]
+    matched.sort(key=lambda x: x[0], reverse=True)
+    return [b for _, b in matched[:limit]]
 
 
 # ==========================================================
@@ -403,7 +466,7 @@ def extract_keywords_from_deepseek(summaries):
 
 
 # ==========================================================
-# ✅ 爬蟲：InfoGov 配對 + 中英合併輸出
+# ✅ 爬蟲：InfoGov 配對 + 中英合併輸出（SWD 原本）
 # ==========================================================
 INFOGOV_HOST = "www.info.gov.hk"
 
@@ -425,10 +488,6 @@ def is_infogov_url(url: str) -> bool:
 
 
 def extract_infogov_id(url: str) -> str:
-    """
-    從 InfoGov URL 取出 P 編號，例如：
-    https://www.info.gov.hk/gia/general/202601/12/P2026010900272.htm -> P2026010900272
-    """
     u = strip_query(url)
     m = re.search(r"/(P\d+)\.htm$", u)
     return m.group(1) if m else ""
@@ -443,7 +502,6 @@ def fetch_html(url: str, timeout=30) -> str:
 
 
 def trafi_extract(url: str):
-    """用 trafilatura 抽取內文與 metadata"""
     downloaded = trafilatura.fetch_url(url)
     text = ""
     meta = {}
@@ -458,10 +516,6 @@ def trafi_extract(url: str):
 
 
 def find_infogov_link_in_swd_page(swd_url: str):
-    """
-    進入 SWD 的單篇新聞頁，嘗試找出指向 info.gov.hk 的連結（通常為新聞公報/新聞稿）
-    回傳 (infogov_url or "")
-    """
     try:
         html = fetch_html(swd_url, timeout=30)
         soup = BeautifulSoup(html, "lxml")
@@ -476,10 +530,6 @@ def find_infogov_link_in_swd_page(swd_url: str):
 
 
 def find_other_language_infogov_url(infogov_url: str):
-    """
-    從 InfoGov 頁面中找「另一語言版本」的 InfoGov 連結。
-    回傳 other_url or ""
-    """
     try:
         html = fetch_html(infogov_url, timeout=30)
         soup = BeautifulSoup(html, "lxml")
@@ -515,7 +565,6 @@ def detect_lang_from_url(url: str) -> str:
 
 
 def fetch_swd_list(list_url: str, target_years):
-    """SWD press 列表頁：抓到每則（date,title,url）"""
     html = fetch_html(list_url, timeout=30)
     soup = BeautifulSoup(html, "lxml")
     rows = soup.find_all("tr")
@@ -547,7 +596,6 @@ def make_safe_filename(s: str, max_len=180) -> str:
 
 
 def derive_date_from_text_zh(text: str) -> str:
-    """中文日期解析：YYYY年M月D日 -> YYYY-MM-DD"""
     if not text:
         return ""
     m = re.search(r'(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日', text)
@@ -557,13 +605,6 @@ def derive_date_from_text_zh(text: str) -> str:
 
 
 def background_crawl_news():
-    """
-    背景爬蟲：
-    1) 抓 SWD tc/en press 列表（今年+去年）
-    2) 進每一筆 SWD 頁，找 InfoGov 連結（如有）
-    3) 由 InfoGov 連結找另一語言版本 InfoGov
-    4) 抓取中英正文，合併寫入 crawler/swd_press/*.json
-    """
     global crawl_progress
 
     crawl_progress.update({
@@ -726,21 +767,68 @@ def background_crawl_news():
 
 
 # ==========================================================
-# ✅ 背景生成文章（Prompt 中英對照 + 一次呼叫雙語輸出）
+# ✅ HA 背景爬蟲（新增）
 # ==========================================================
-def background_generate_articles(selected_keywords, timestamp):
-    """
-    背景生成文章：每個關鍵詞生成 1 篇文章，但文章包含 zh/en 兩個版本（一次呼叫 DeepSeek）
-    DeepSeek 輸出格式：
-    [
-      {
-        "zh": {"title":..., "body":..., "meta_title":..., "meta_description":...},
-        "en": {"title":..., "body":..., "meta_title":..., "meta_description":...},
-        "keywords": ["..."]
-      }
-    ]
-    """
+def background_crawl_ha(days=30):
+    global ha_crawl_progress
+
+    ha_crawl_progress.update({
+        "total": 0,
+        "completed": 0,
+        "running": True,
+        "status": "running",
+        "message": "HA 爬蟲啟動中..."
+    })
+
+    def cb(p: dict):
+        try:
+            if "total" in p and isinstance(p["total"], int):
+                ha_crawl_progress["total"] = p["total"]
+            if "completed" in p and isinstance(p["completed"], int):
+                ha_crawl_progress["completed"] = p["completed"]
+            if "message" in p:
+                ha_crawl_progress["message"] = str(p["message"])
+            if "status" in p:
+                ha_crawl_progress["status"] = str(p["status"])
+        except Exception:
+            pass
+
+    try:
+        os.makedirs(HA_CRAWLER_DIR, exist_ok=True)
+
+        run_ha_crawl(
+            out_dir=HA_CRAWLER_DIR,
+            days=days,
+            max_pages=200,
+            max_items=500,
+            sleep=0.8,
+            overwrite=True,
+            progress_cb=cb,
+            enable_debug_html=True,
+        )
+
+        ha_crawl_progress.update({
+            "running": False,
+            "status": "completed",
+            "message": "✅ HA 爬蟲完成！頁面即將自動刷新..."
+        })
+
+    except Exception as e:
+        ha_crawl_progress.update({
+            "running": False,
+            "status": "error",
+            "message": f"❌ HA 爬蟲執行錯誤：{str(e)}"
+        })
+        print("❌ HA 爬蟲錯誤：", e)
+
+
+# ==========================================================
+# ✅ 背景生成文章（支援 source：swd/ha）
+# ==========================================================
+def background_generate_articles(selected_keywords, timestamp, source="swd"):
     global generated_prompts
+
+    source = normalize_source(source)
 
     total_articles = len(selected_keywords)
     progress_data.update({
@@ -753,12 +841,11 @@ def background_generate_articles(selected_keywords, timestamp):
 
     generated_prompts[timestamp] = []
 
-    recent_blocks = get_recent_articles_text(days=30)
+    recent_blocks = get_recent_articles_text(source=source, days=30)
     if not recent_blocks:
         print("⚠️ 沒有找到近期新聞，將使用關鍵字生成")
-        fallback_content = "（無可用參考資料，請基於關鍵詞生成符合香港社會福利政策背景的專業內容）"
+        fallback_content = "（無可用參考資料，請基於關鍵詞生成符合香港社會福利/醫療政策背景的專業內容）"
     else:
-        # fallback 也用中英並列 block
         fallback_content = "\n\n---\n\n".join(recent_blocks[:3])[:2500]
 
     lock = threading.Lock()
@@ -768,28 +855,16 @@ def background_generate_articles(selected_keywords, timestamp):
         main_keyword = selected_keywords[article_index]
         chosen_keywords = [main_keyword]
 
-        print(f"📝 正在生成第 {article_index + 1}/{total_articles} 篇文章（中英雙語），主題：{main_keyword}")
+        print(f"📝 正在生成第 {article_index + 1}/{total_articles} 篇文章（中英雙語），主題：{main_keyword}（source={source}）")
 
-        relevant_articles = get_relevant_articles([main_keyword], days=30)
+        reference_blocks = get_relevant_reference_blocks(source=source, keywords=[main_keyword], days=30, limit=5)
 
-        if relevant_articles:
-            reference_blocks = []
-            for art in relevant_articles:
-                parts = []
-                if art.get("title_zh") or art.get("text_zh"):
-                    parts.append(f"【ZH｜{art.get('title_zh') or '（無中文標題）'}】\n{art.get('text_zh') or '（無中文內文）'}")
-                if art.get("title_en") or art.get("text_en"):
-                    parts.append(f"【EN｜{art.get('title_en') or '(No English title)'}】\n{art.get('text_en') or '(No English content)'}")
-                block = "\n\n".join(parts).strip()
-                if block:
-                    reference_blocks.append(block)
-
-            # ✅ 最多 5 篇（你要求）
+        if reference_blocks:
             reference_content = "\n\n---\n\n".join(reference_blocks)[:4200]
-            print(f"✅ 為關鍵詞「{main_keyword}」找到 {len(relevant_articles)} 篇相關新聞（含中英對照）")
+            print(f"✅ 為關鍵詞「{main_keyword}」找到 {len(reference_blocks)} 篇相關新聞（{source}，含中英對照）")
         else:
             reference_content = fallback_content
-            print(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（含中英）")
+            print(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（{source}，含中英）")
 
         # -----------------------------
         # ✅ Prompt（中文）
@@ -806,7 +881,7 @@ def background_generate_articles(selected_keywords, timestamp):
             "3. 可以重組、摘要、改寫，但核心事實必須來自參考資料\n"
             f"4. 文章標題和內容必須圍繞「{main_keyword}」展開\n"
             "5. 保持客觀、專業的新聞報導風格\n"
-            "6. 如果參考資料不足，請基於關鍵詞生成符合香港社會福利政策背景的專業內容（但仍不要編造具體數據與細節）\n\n"
+            "6. 如果參考資料不足，請基於關鍵詞生成符合香港社會福利/醫療政策背景的專業內容（但仍不要編造具體數據與細節）\n\n"
             "---\n"
             "## 📰 參考新聞資料（中英並列）\n"
             f"{reference_content}\n\n"
@@ -846,7 +921,8 @@ def background_generate_articles(selected_keywords, timestamp):
             generated_prompts[timestamp].append({
                 "index": article_index + 1,
                 "keyword": main_keyword,
-                "prompt": {"zh": prompt_zh}
+                "prompt": {"zh": prompt_zh},
+                "source": source
             })
 
         output = call_deepseek(prompt_zh)
@@ -873,7 +949,6 @@ def background_generate_articles(selected_keywords, timestamp):
 
         for idx, output_text, chosen_kws in sorted(results, key=lambda x: x[0]):
             try:
-                # 盡量擷取第一段 JSON array（避免模型加前後綴字）
                 match = re.search(r'\[.*\]', output_text, re.S)
                 parsed = json.loads(match.group(0)) if match else json.loads(output_text)
 
@@ -888,7 +963,6 @@ def background_generate_articles(selected_keywords, timestamp):
                     zh = item.get("zh") or {}
                     en = item.get("en") or {}
 
-                    # 組裝 DB record（向後相容：舊欄位仍存中文）
                     record = {
                         "title_zh": (zh.get("title") or "").strip(),
                         "body_zh": (zh.get("body") or "").strip(),
@@ -901,7 +975,6 @@ def background_generate_articles(selected_keywords, timestamp):
                         "keywords": item.get("keywords", chosen_kws)
                     }
 
-                    # 舊欄位 fallback（給舊模板/列表用）
                     record["title"] = record["title_zh"] or "未命名"
                     record["body"] = record["body_zh"] or ""
                     record["meta_title"] = record["meta_title_zh"] or ""
@@ -969,8 +1042,11 @@ def index():
 
 @app.route("/keywords", methods=["GET", "POST"])
 def keywords():
-    texts = get_recent_articles_text(days=7)
+    source = normalize_source(request.args.get("source", "swd"))
+
+    texts = get_recent_articles_text(source=source, days=7)
     result = extract_keywords_from_deepseek(texts)
+
     trend_topic = ""
     trends = None
     if request.method == "POST":
@@ -978,12 +1054,12 @@ def keywords():
         if trend_topic:
             trends = get_google_trends_data(keyword=trend_topic, geo="HK")
 
-    return render_template("keywords.html", keywords=result, trends=trends, trend_topic=trend_topic)
+    return render_template("keywords.html", keywords=result, trends=trends, trend_topic=trend_topic, source=source)
 
 
 @app.route("/start_crawl", methods=["POST"])
 def start_crawl():
-    """啟動背景爬蟲"""
+    """啟動 SWD 背景爬蟲"""
     if crawl_progress["running"]:
         return jsonify({"success": False, "message": "爬蟲正在執行中，請稍候..."})
 
@@ -1001,18 +1077,44 @@ def start_crawl():
 
 @app.route("/crawl_progress")
 def get_crawl_progress():
-    """查詢爬蟲進度"""
+    """查詢 SWD 爬蟲進度"""
     return jsonify(crawl_progress)
+
+
+@app.route("/start_crawl_ha", methods=["POST"])
+def start_crawl_ha():
+    """啟動 HA 背景爬蟲"""
+    if ha_crawl_progress["running"]:
+        return jsonify({"success": False, "message": "HA 爬蟲正在執行中，請稍候..."})
+
+    ha_crawl_progress.update({
+        "total": 0,
+        "completed": 0,
+        "running": True,
+        "status": "running",
+        "message": "HA 爬蟲啟動中..."
+    })
+
+    threading.Thread(target=background_crawl_ha, kwargs={"days": 30}, daemon=True).start()
+    return jsonify({"success": True, "message": "HA 爬蟲已啟動"})
+
+
+@app.route("/crawl_progress_ha")
+def get_crawl_progress_ha():
+    """查詢 HA 爬蟲進度"""
+    return jsonify(ha_crawl_progress)
 
 
 @app.route("/generate_articles", methods=["POST"])
 def generate_articles():
     selected_keywords = request.form.getlist("selected_keywords")
+    source = normalize_source(request.form.get("source", "swd"))
+
     if not selected_keywords or len(selected_keywords) < 1:
         return "<h3>⚠️ 請至少選擇 1 個關鍵詞才能生成文章。</h3><a href='/keywords'>返回</a>"
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    threading.Thread(target=background_generate_articles, args=(selected_keywords, timestamp)).start()
+    threading.Thread(target=background_generate_articles, args=(selected_keywords, timestamp, source)).start()
 
     return render_template("generate.html")
 
@@ -1144,7 +1246,6 @@ def view_article(article_id):
 
         article_dict = dict(article)
 
-        # keywords 轉回 list（給模板用）
         if article_dict.get('keywords'):
             try:
                 if isinstance(article_dict['keywords'], str):
@@ -1214,7 +1315,8 @@ def test_db():
 # 啟動伺服器
 # ==========================================================
 if __name__ == "__main__":
-    print("📂 爬蟲資料夾:", CRAWLER_DIR)
+    print("📂 SWD 爬蟲資料夾:", CRAWLER_DIR)
+    print("📂 HA 爬蟲資料夾:", HA_CRAWLER_DIR)
     print("🗄️ 初始化資料庫...")
     init_database()
     print("🚀 Flask 啟動中...")
