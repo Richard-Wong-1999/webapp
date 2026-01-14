@@ -11,6 +11,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from crawler.ha_press_spider import run_ha_crawl
 
 # ========== 爬虫相关导入 ==========
 from bs4 import BeautifulSoup
