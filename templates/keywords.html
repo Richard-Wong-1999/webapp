@@ -36,24 +36,26 @@
 
         <div style="margin-top:10px; font-size: 14px;">
           <b>目前關鍵字來源：</b>
-          {% if (source or 'swd') == 'ha' %}
-            <span>HA（醫院管理局新聞稿）</span>
-          {% else %}
-            <span>SWD（社會福利署新聞稿）</span>
-          {% endif %}
-          <div style="margin-top:6px;">
-            <a href="/keywords?source=swd">切換到 SWD 關鍵字</a> |
-            <a href="/keywords?source=ha">切換到 HA 關鍵字</a>
+          <span id="currentSourceLabel">
+            {% if (source or 'swd') == 'ha' %}
+              HA（醫院管理局新聞稿）
+            {% else %}
+              SWD（社會福利署新聞稿）
+            {% endif %}
+          </span>
+          <div style="margin-top:6px; display:flex; gap:10px; flex-wrap:wrap;">
+            <button type="button" class="crawl-btn" id="tabSwdBtn" onclick="switchSource('swd')">切換到 SWD 關鍵字</button>
+            <button type="button" class="crawl-btn" id="tabHaBtn" onclick="switchSource('ha')">切換到 HA 關鍵字</button>
           </div>
         </div>
       </div>
 
       <h2>🔥 近30天關鍵字分析</h2>
 
-      <form action="/generate_articles" method="post">
-        <input type="hidden" name="source" value="{{ source or 'swd' }}">
+      <form action="/generate_articles" method="post" id="generateForm">
+        <input type="hidden" name="source" id="sourceInput" value="{{ source or 'swd' }}">
 
-       <div id="keywordArea">
+        <div id="keywordArea">
           {% if keywords %}
           <div class="keyword-list" id="keywordList">
             {% for kw in keywords %}
@@ -71,7 +73,7 @@
         <button type="submit">生成文章</button>
       </form>
 
-      <p class="note">
+      <p class="note" id="sourceNote">
         資料來源：
         {% if (source or 'swd') == 'ha' %}
           醫院管理局（HA）新聞稿（自動化爬蟲）
@@ -120,12 +122,180 @@
   </div>
 
   <script>
+    // ============================================================
+    // 全域狀態：source tabs + keyword selection per source（方案 B）
+    // ============================================================
+    let activeSource = ("{{ source or 'swd' }}").toLowerCase() === "ha" ? "ha" : "swd";
+    const keywordMemory = { swd: null, ha: null }; // keywords list cache (frontend)
+    const selectedBySource = {
+      swd: new Set(),
+      ha: new Set()
+    };
+
+    // 監控狀態（兩個輪詢互不干擾）
     let crawlMonitoring = false;
     let crawlHaMonitoring = false;
 
-    // ---------------------------
+    // ============================================================
+    // 小工具
+    // ============================================================
+    function normalizeSource(s) {
+      s = String(s || "swd").toLowerCase();
+      return s === "ha" ? "ha" : "swd";
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function setSourceLabel(source) {
+      const el = document.getElementById("currentSourceLabel");
+      if (!el) return;
+      el.textContent = source === "ha"
+        ? "HA（醫院管理局新聞稿）"
+        : "SWD（社會福利署新聞稿）";
+    }
+
+    function setSourceNote(source) {
+      const el = document.getElementById("sourceNote");
+      if (!el) return;
+      el.textContent = source === "ha"
+        ? "資料來源：醫院管理局（HA）新聞稿（自動化爬蟲）"
+        : "資料來源：香港社會福利署（SWD）新聞稿（自動化爬蟲）";
+    }
+
+    function setSourceInput(source) {
+      const input = document.getElementById("sourceInput");
+      if (input) input.value = source;
+    }
+
+    function updateTabButtons() {
+      const swdBtn = document.getElementById("tabSwdBtn");
+      const haBtn = document.getElementById("tabHaBtn");
+      if (!swdBtn || !haBtn) return;
+
+      // 不改 CSS 檔的前提下，做最簡單的視覺提示
+      swdBtn.disabled = (activeSource === "swd");
+      haBtn.disabled = (activeSource === "ha");
+    }
+
+    function syncSelectionFromDOM(source) {
+      source = normalizeSource(source);
+      const area = document.getElementById("keywordArea");
+      if (!area) return;
+
+      const checked = area.querySelectorAll('input[type="checkbox"][name="selected_keywords"]:checked');
+      const set = new Set();
+      checked.forEach(cb => set.add(String(cb.value)));
+      selectedBySource[source] = set;
+    }
+
+    function applySelectionToDOM(source) {
+      source = normalizeSource(source);
+      const set = selectedBySource[source] || new Set();
+
+      const area = document.getElementById("keywordArea");
+      if (!area) return;
+
+      const checkboxes = area.querySelectorAll('input[type="checkbox"][name="selected_keywords"]');
+      checkboxes.forEach(cb => {
+        cb.checked = set.has(String(cb.value));
+      });
+    }
+
+    // ============================================================
+    // Keywords rendering
+    // ============================================================
+    function renderKeywords(source, keywords) {
+      source = normalizeSource(source);
+      const area = document.getElementById("keywordArea");
+      if (!area) return;
+
+      if (!keywords || keywords.length === 0) {
+        area.innerHTML = '<p id="keywordEmpty">目前沒有可分析的新聞資料。</p>';
+        return;
+      }
+
+      const itemsHtml = keywords.map(kw => {
+        const safe = String(kw);
+        const escaped = escapeHtml(safe);
+
+        return `
+          <div class="keyword-item">
+            <input type="checkbox" name="selected_keywords" value="${escaped}">
+            <label>${escaped}</label>
+          </div>
+        `;
+      }).join("");
+
+      area.innerHTML = `<div class="keyword-list" id="keywordList">${itemsHtml}</div>`;
+
+      // render 完後，把此來源的已選取狀態套回去
+      applySelectionToDOM(source);
+
+      // 監聽本清單的變更，更新對應來源的 selection set
+      const listEl = document.getElementById("keywordList");
+      if (listEl) {
+        listEl.addEventListener("change", () => {
+          syncSelectionFromDOM(source);
+        });
+      }
+    }
+
+    async function fetchKeywords(source, { force = false } = {}) {
+      source = normalizeSource(source);
+      const url = `/keywords_json?source=${encodeURIComponent(source)}${force ? "&force=1" : ""}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      return data.keywords || [];
+    }
+
+    async function refreshKeywordsForSource(source, { force = true } = {}) {
+      source = normalizeSource(source);
+      try {
+        const kws = await fetchKeywords(source, { force });
+        keywordMemory[source] = kws;
+
+        // 若目前在看這個 source，才刷新下方清單
+        if (activeSource === source) {
+          renderKeywords(source, kws);
+        }
+      } catch (e) {
+        console.error("refreshKeywordsForSource error:", e);
+      }
+    }
+
+    async function switchSource(source) {
+      source = normalizeSource(source);
+
+      // 切換前，先把目前頁面勾選狀態記起來（方案 B）
+      syncSelectionFromDOM(activeSource);
+
+      activeSource = source;
+      setSourceLabel(source);
+      setSourceNote(source);
+      setSourceInput(source);
+      updateTabButtons();
+
+      // 用前端快取（沒有再抓）
+      if (keywordMemory[source]) {
+        renderKeywords(source, keywordMemory[source]);
+        return;
+      }
+
+      const kws = await fetchKeywords(source, { force: false });
+      keywordMemory[source] = kws;
+      renderKeywords(source, kws);
+    }
+
+    // ============================================================
     // SWD crawl
-    // ---------------------------
+    // ============================================================
     async function startCrawl() {
       const btn = document.getElementById('crawlBtn');
       const status = document.getElementById('crawlStatus');
@@ -152,7 +322,7 @@
         }
 
         crawlMonitoring = true;
-        await monitorCrawlProgress();
+        monitorCrawlProgress(); // 不 await，讓 UI 保持順暢
 
       } catch (error) {
         status.innerText = '❌ 發生錯誤：' + error.message;
@@ -166,6 +336,7 @@
       const btn = document.getElementById('crawlBtn');
       const status = document.getElementById('crawlStatus');
       const progressBar = document.getElementById('crawlProgressBar');
+      const progressContainer = document.getElementById('crawlProgressContainer');
 
       while (true) {
         try {
@@ -179,33 +350,37 @@
             progressBar.style.width = percent + '%';
           }
 
+          // running=false 表示結束（completed / error / idle）
           if (!data.running) {
             btn.disabled = false;
             btn.innerText = '📥 爬取 SWD 最新新聞稿';
             crawlMonitoring = false;
 
             if (data.status === 'completed') {
-              status.innerText = (data.message || '✅ 已更新') + ' 頁面即將自動刷新...';
-              await refreshKeywordsForCurrentSource();
+              status.innerText = (data.message || '✅ 已更新') + '（SWD 關鍵字將自動更新）';
+              await refreshKeywordsForSource("swd", { force: true });
             }
+
+            // 停留一下進度條也可以（看你要不要）
+            // progressContainer.style.display = 'none';
             break;
           }
 
           await new Promise(resolve => setTimeout(resolve, 1000));
-
         } catch (error) {
           status.innerText = '❌ 監控 SWD 進度時發生錯誤';
           btn.disabled = false;
           btn.innerText = '📥 爬取 SWD 最新新聞稿';
           crawlMonitoring = false;
+          progressContainer.style.display = 'block';
           break;
         }
       }
     }
 
-    // ---------------------------
+    // ============================================================
     // HA crawl
-    // ---------------------------
+    // ============================================================
     async function startHaCrawl() {
       const btn = document.getElementById('crawlHaBtn');
       const status = document.getElementById('crawlHaStatus');
@@ -232,7 +407,7 @@
         }
 
         crawlHaMonitoring = true;
-        await monitorHaCrawlProgress();
+        monitorHaCrawlProgress(); // 不 await
 
       } catch (error) {
         status.innerText = '❌ 發生錯誤：' + error.message;
@@ -246,6 +421,7 @@
       const btn = document.getElementById('crawlHaBtn');
       const status = document.getElementById('crawlHaStatus');
       const progressBar = document.getElementById('crawlHaProgressBar');
+      const progressContainer = document.getElementById('crawlHaProgressContainer');
 
       while (true) {
         try {
@@ -265,72 +441,92 @@
             crawlHaMonitoring = false;
 
             if (data.status === 'completed') {
-              status.innerText = (data.message || '✅ 已更新') + ' 頁面即將自動刷新...';
-              await refreshKeywordsForCurrentSource();
+              status.innerText = (data.message || '✅ 已更新') + '（HA 關鍵字將自動更新）';
+              await refreshKeywordsForSource("ha", { force: true });
             }
+
+            // progressContainer.style.display = 'none';
             break;
           }
 
           await new Promise(resolve => setTimeout(resolve, 1000));
-
         } catch (error) {
           status.innerText = '❌ 監控 HA 進度時發生錯誤';
           btn.disabled = false;
           btn.innerText = '📥 爬取 HA 新聞稿';
           crawlHaMonitoring = false;
+          progressContainer.style.display = 'block';
           break;
         }
       }
     }
 
-    function getCurrentSource() {
-  // 你目前用 querystring 控制 source：/keywords?source=ha
-  const params = new URLSearchParams(window.location.search);
-  const s = (params.get("source") || "swd").toLowerCase();
-  return s === "ha" ? "ha" : "swd";
-}
+    // ============================================================
+    // 頁面載入：初始化 tabs、並同時接上兩個進度輪詢（若正在跑）
+    // ============================================================
+    window.addEventListener("load", async () => {
+      // 初始化 label / note / hidden input / tab 狀態
+      setSourceLabel(activeSource);
+      setSourceNote(activeSource);
+      setSourceInput(activeSource);
+      updateTabButtons();
 
-function renderKeywords(keywords) {
-  const area = document.getElementById("keywordArea");
-  if (!area) return;
+      // 把 SSR 當下的 keyword list 記到前端快取
+      // 以及把已勾選狀態（若使用者剛進來就有勾）記起來
+      // 這樣切換來源再切回來不會丟。
+      try {
+        const initialKeywords = [];
+        const area = document.getElementById("keywordArea");
+        if (area) {
+          const labels = area.querySelectorAll(".keyword-item label");
+          labels.forEach(l => initialKeywords.push(l.textContent || ""));
+        }
+        if (initialKeywords.length > 0) {
+          keywordMemory[activeSource] = initialKeywords;
+        }
+        syncSelectionFromDOM(activeSource);
+      } catch (e) {
+        console.warn("init keywordMemory failed:", e);
+      }
 
-  if (!keywords || keywords.length === 0) {
-    area.innerHTML = '<p id="keywordEmpty">目前沒有可分析的新聞資料。</p>';
-    return;
-  }
+      // ✅ 同時檢查兩個爬蟲是否在跑，若在跑就自動開始監控（不影響按鈕）
+      try {
+        const swd = await (await fetch('/crawl_progress')).json();
+        if (swd && swd.running) {
+          crawlMonitoring = true;
 
-  const itemsHtml = keywords.map(kw => {
-    const safe = String(kw);
-    // 直接用文字節點等級的 escape 會更安全；此處先做最小替換避免破 HTML
-    const escaped = safe
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
+          // 讓按鈕呈現「執行中」
+          const btn = document.getElementById('crawlBtn');
+          const status = document.getElementById('crawlStatus');
+          const progressContainer = document.getElementById('crawlProgressContainer');
+          if (btn) { btn.disabled = true; btn.innerText = '⏳ SWD 爬蟲執行中...'; }
+          if (status) status.innerText = swd.message || 'SWD 爬蟲執行中...';
+          if (progressContainer) progressContainer.style.display = 'block';
 
-    return `
-      <div class="keyword-item">
-        <input type="checkbox" name="selected_keywords" value="${escaped}">
-        <label>${escaped}</label>
-      </div>
-    `;
-  }).join("");
+          monitorCrawlProgress();
+        }
+      } catch (e) {
+        console.warn("auto monitor SWD failed:", e);
+      }
 
-  area.innerHTML = `<div class="keyword-list" id="keywordList">${itemsHtml}</div>`;
-}
+      try {
+        const ha = await (await fetch('/crawl_progress_ha')).json();
+        if (ha && ha.running) {
+          crawlHaMonitoring = true;
 
-async function refreshKeywordsForCurrentSource() {
-  const source = getCurrentSource();
-  try {
-    const res = await fetch(`/keywords_json?source=${encodeURIComponent(source)}`);
-    const data = await res.json();
-    renderKeywords(data.keywords || []);
-  } catch (e) {
-    // 不要影響爬蟲流程，只提示
-    console.error("refreshKeywords error:", e);
-  }
-}
+          const btn = document.getElementById('crawlHaBtn');
+          const status = document.getElementById('crawlHaStatus');
+          const progressContainer = document.getElementById('crawlHaProgressContainer');
+          if (btn) { btn.disabled = true; btn.innerText = '⏳ HA 爬蟲執行中...'; }
+          if (status) status.innerText = ha.message || 'HA 爬蟲執行中...';
+          if (progressContainer) progressContainer.style.display = 'block';
+
+          monitorHaCrawlProgress();
+        }
+      } catch (e) {
+        console.warn("auto monitor HA failed:", e);
+      }
+    });
   </script>
 </body>
 </html>
