@@ -1056,6 +1056,12 @@ def keywords():
 
     return render_template("keywords.html", keywords=result, trends=trends, trend_topic=trend_topic, source=source)
 
+@app.route("/keywords_json", methods=["GET"])
+def keywords_json():
+    source = normalize_source(request.args.get("source", "swd"))
+    texts = get_recent_articles_text(source=source, days=7)
+    result = extract_keywords_from_deepseek(texts)
+    return jsonify({"source": source, "keywords": result})
 
 @app.route("/start_crawl", methods=["POST"])
 def start_crawl():
