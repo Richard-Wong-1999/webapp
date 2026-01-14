@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>關鍵字分析結果</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body class="keywords-body">
+  <div class="container">
+    <!-- 左區：關鍵字分析 -->
+    <div class="left-panel">
+      <!-- ✅ 爬虫功能区块 -->
+      <div class="crawl-section">
+        <h3 style="margin: 0 0 10px 0; font-size: 16px;">🔄 更新新聞資料</h3>
+        <button class="crawl-btn" id="crawlBtn" onclick="startCrawl()">
+          📥 爬取最新新聞稿
+        </button>
+        <div class="crawl-status" id="crawlStatus"></div>
+        <div class="progress-bar-container" id="crawlProgressContainer" style="display:none;">
+          <div class="progress-bar" id="crawlProgressBar"></div>
+        </div>
+      </div>
+
+      <h2>🔥 近30天社會熱度關鍵字分析</h2>
+
+      <form action="/generate_articles" method="post">
+        {% if keywords %}
+        <div class="keyword-list">
+          {% for kw in keywords %}
+          <div class="keyword-item">
+            <input type="checkbox" name="selected_keywords" value="{{ kw }}">
+            <label>{{ kw }}</label>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p>目前沒有可分析的新聞資料。</p>
+        {% endif %}
+
+        <button type="submit">生成文章</button>
+      </form>
+
+      <p class="note">資料來源：香港社會福利署新聞稿（自動化爬蟲）</p>
+    </div>
+
+    <!-- 右區：Google 趨勢 -->
+    <div class="right-panel">
+      <h2>📈 Google 趨勢（香港）</h2>
+
+      <form method="post" action="/keywords">
+        <input type="text" name="trend_topic" placeholder="長者、健康護理等方面的趨勢...">
+        <button type="submit">搜尋趨勢</button>
+      </form>
+
+      {% if trend_topic %}
+        <h3>🔍 搜索結果：「{{ trend_topic }}」</h3>
+        {% if trends %}
+          <h4>📘 相關主題</h4>
+          {% if trends.topics %}
+            {% for item in trends.topics %}
+              <div>{{ loop.index }}. {{ item.topic_title }} <small>{{ item.type }}</small></div>
+            {% endfor %}
+          {% else %}
+            <p>暫無主題資料。</p>
+          {% endif %}
+
+          <h4>📈 相關搜尋</h4>
+          {% if trends.queries %}
+            {% for item in trends.queries %}
+              <div>{{ loop.index }}. {{ item.query }} <small>{{ item.value }}</small></div>
+            {% endfor %}
+          {% else %}
+            <p>暫無搜尋資料。</p>
+          {% endif %}
+        {% else %}
+          <p>未能取得「{{ trend_topic }}」的趨勢資料，可能搜尋量過低。</p>
+        {% endif %}
+      {% else %}
+        <div class="trend-placeholder"></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <script>
+    let crawlMonitoring = false;
+
+    async function startCrawl() {
+      const btn = document.getElementById('crawlBtn');
+      const status = document.getElementById('crawlStatus');
+      const progressContainer = document.getElementById('crawlProgressContainer');
+      const progressBar = document.getElementById('crawlProgressBar');
+
+      if (crawlMonitoring) return;
+
+      btn.disabled = true;
+      btn.innerText = '⏳ 爬蟲執行中...';
+      status.innerText = '正在啟動爬蟲...';
+      progressContainer.style.display = 'block';
+      progressBar.style.width = '0%';
+
+      try {
+        const response = await fetch('/start_crawl', { method: 'POST' });
+        const result = await response.json();
+
+        if (!result.success) {
+          status.innerText = result.message || '⚠️ 無法啟動爬蟲';
+          btn.disabled = false;
+          btn.innerText = '📥 爬取最新新聞稿';
+          return;
+        }
+
+        crawlMonitoring = true;
+        await monitorCrawlProgress();
+
+      } catch (error) {
+        status.innerText = '❌ 發生錯誤：' + error.message;
+        btn.disabled = false;
+        btn.innerText = '📥 爬取最新新聞稿';
+        crawlMonitoring = false;
+      }
+    }
+
+    async function monitorCrawlProgress() {
+      const btn = document.getElementById('crawlBtn');
+      const status = document.getElementById('crawlStatus');
+      const progressBar = document.getElementById('crawlProgressBar');
+
+      while (true) {
+        try {
+          const response = await fetch('/crawl_progress');
+          const data = await response.json();
+
+          status.innerText = data.message || '';
+
+          if (data.total > 0) {
+            const percent = Math.round((data.completed / data.total) * 100);
+            progressBar.style.width = percent + '%';
+          }
+
+          if (!data.running) {
+            btn.disabled = false;
+            btn.innerText = '📥 爬取最新新聞稿';
+            crawlMonitoring = false;
+
+            if (data.status === 'completed') {
+              status.innerText = (data.message || '✅ 完成') + ' 頁面即將自動刷新...';
+              setTimeout(() => window.location.reload(), 2000);
+            }
+            break;
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 1000));
+
+        } catch (error) {
+          status.innerText = '❌ 監控進度時發生錯誤';
+          btn.disabled = false;
+          btn.innerText = '📥 爬取最新新聞稿';
+          crawlMonitoring = false;
+          break;
+        }
+      }
+    }
+  </script>
+</body>
+</html>

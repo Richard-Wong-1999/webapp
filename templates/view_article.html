@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ (article.title_zh or article.title) }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="view-body">
+  <div class="container">
+    <h1>{{ (article.title_zh or article.title) }}</h1>
+
+    <div class="meta">
+      <div class="meta-item">🆔 <strong>文章ID：</strong>{{ article.id }}</div>
+      <div class="meta-item">📅 <strong>建立時間：</strong>{{ article.created_at.strftime('%Y-%m-%d %H:%M:%S') if article.created_at else '未知' }}</div>
+      <div class="meta-item">🏷️ <strong>批次：</strong>{{ article.timestamp or '未分類' }}</div>
+    </div>
+
+    <hr style="margin: 18px 0; opacity: 0.3;">
+
+    <!-- 中文內容 -->
+    <section>
+      <h2 style="margin: 0 0 10px 0;">中文內容</h2>
+      <div class="content">
+        {{ (article.body_zh or article.body or '')|replace('\n', '<br>')|safe }}
+      </div>
+
+      <div class="seo-section">
+        <h3>🔍 SEO 資訊（中文）</h3>
+        <p><strong>SEO 標題：</strong>{{ article.meta_title_zh or article.meta_title or '無' }}</p>
+        <p><strong>SEO 描述：</strong>{{ article.meta_description_zh or article.meta_description or '無' }}</p>
+      </div>
+    </section>
+
+    <hr style="margin: 22px 0; opacity: 0.3;">
+
+    <!-- 英文內容 -->
+    <section>
+      <h2 style="margin: 0 0 10px 0;">English Content</h2>
+
+      {% if article.body_en %}
+        <h3 style="margin: 0 0 10px 0;">{{ article.title_en or 'Untitled' }}</h3>
+        <div class="content">
+          {{ (article.body_en or '')|replace('\n', '<br>')|safe }}
+        </div>
+
+        <div class="seo-section">
+          <h3>🔍 SEO Info (EN)</h3>
+          <p><strong>SEO Title：</strong>{{ article.meta_title_en or 'N/A' }}</p>
+          <p><strong>SEO Description：</strong>{{ article.meta_description_en or 'N/A' }}</p>
+        </div>
+      {% else %}
+        <p style="color:#999;">（此文章沒有英文版本，可能是舊資料或生成失敗。）</p>
+      {% endif %}
+    </section>
+
+    <hr style="margin: 22px 0; opacity: 0.3;">
+
+    <!-- 關鍵字（共用） -->
+    <div class="seo-section">
+      <h3>🏷️ 關鍵字</h3>
+      <div class="keywords">
+        {% if article.keywords %}
+          {% set kw_list = article.keywords|tojson|fromjson %}
+          {% for kw in kw_list %}
+            <span class="keyword-tag">{{ kw }}</span>
+          {% endfor %}
+        {% else %}
+          <span style="color: #999;">無關鍵字</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div style="margin-top: 30px;">
+      <a href="/manage_articles" class="btn btn-primary">⬅️ 返回管理頁</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+<h2>📑 新聞稿列表</h2>
+<ul>
+  {% for n in news_list %}
+  <li><b>{{n.date}}</b> — {{n.title}}<br>{{n.summary}}</li>
+  {% endfor %}
+</ul>
+<a href="{{ url_for('home') }}">⬅️ 返回首頁</a>

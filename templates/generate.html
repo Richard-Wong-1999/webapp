@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文章生成中</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    /* 讓 prompt 的區塊更清楚（不影響你原本 style.css） */
+    .prompt-lang-tabs {
+      display: flex;
+      gap: 8px;
+      margin: 8px 0 10px 0;
+      flex-wrap: wrap;
+    }
+    .prompt-lang-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin: 0;
+    }
+    .prompt-subblock {
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 10px;
+      padding: 10px;
+      margin-top: 10px;
+      background: rgba(255,255,255,0.6);
+    }
+    .prompt-content { display: none; }
+    .prompt-content.active { display: block; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: auto;
+      margin: 10px 0 0 0;
+    }
+  </style>
+</head>
+<body class="generate-body">
+  <div class="container">
+    <h3>🚀 正在生成文章...</h3>
+    <div id='progress-box'>
+      <p><b>進度：</b><span id='progress-text'>初始化中...</span></p>
+      <div class="progress-container">
+        <div id='progress-bar' class="progress-bar">0%</div>
+      </div>
+      <ul id='title-list'></ul>
+    </div>
+
+    <div class="buttons">
+      <a href="/keywords" class="btn btn-secondary">⬅️ 返回關鍵字頁</a>
+      <a href="/manage_articles" class="btn btn-primary">📊 管理資料庫</a>
+    </div>
+
+    <!-- ✅ 顯示 Prompts 區域 -->
+    <div id="prompts-section" class="prompts-container" style="display: none;">
+      <h3>📋 發送給 AI 的指令（Prompts）</h3>
+      <div id="prompts-list"></div>
+    </div>
+  </div>
+
+  <script>
+    let promptsLoaded = false;
+
+    async function updateProgress(){
+      const txt = document.getElementById('progress-text');
+      const bar = document.getElementById('progress-bar');
+      const list = document.getElementById('title-list');
+
+      while(true){
+        const res = await fetch('/progress');
+        const data = await res.json();
+
+        if(data.total > 0){
+          const percent = Math.round((data.completed / data.total) * 100);
+          txt.innerText = data.running ?
+            `第 ${data.completed} / ${data.total} 篇完成` :
+            `✅ 全部完成，共 ${data.total} 篇`;
+          bar.style.width = percent + "%";
+          bar.innerText = percent + "%";
+          list.innerHTML = (data.titles || []).map(t => `<li>📝 ${escapeHtml(String(t))}</li>`).join('');
+        }
+
+        // ✅ 當生成完成後加載 Prompts
+        if(!data.running && !promptsLoaded) {
+          promptsLoaded = true;
+          loadPrompts();
+        }
+
+        if(!data.running) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    // ✅ 加載 Prompts（支援 prompt = {zh} 或舊版 prompt = "..."）
+    async function loadPrompts(){
+      try {
+        const res = await fetch('/get_prompts');
+        const data = await res.json();
+
+        if(data.prompts && data.prompts.length > 0){
+          const section = document.getElementById('prompts-section');
+          const container = document.getElementById('prompts-list');
+
+          let html = '';
+          data.prompts.forEach((item, idx) => {
+            const keyword = escapeHtml(String(item.keyword ?? ''));
+            const index = escapeHtml(String(item.index ?? (idx + 1)));
+
+            // 向後相容：prompt 可能是 string 或 {zh}
+            let zhPrompt = '';
+            if (typeof item.prompt === 'string') {
+              zhPrompt = item.prompt;
+            } else if (item.prompt && typeof item.prompt === 'object') {
+              zhPrompt = item.prompt.zh || '';
+            }
+
+            html += `
+              <div class="prompt-item">
+                <h4>📌 第 ${index} 篇 - 關鍵詞：「${keyword}」</h4>
+
+                <div class="prompt-subblock">
+                  <p class="prompt-lang-title">繁體中文 Prompt</p>
+                  <div class="prompt-lang-tabs">
+                    <button class="toggle-btn" onclick="togglePrompt('${idx}', 'zh')">🔽 展開/收起（中文）</button>
+                  </div>
+                  <div id="prompt-${idx}-zh" class="prompt-content">
+                    <pre>${escapeHtml(String(zhPrompt || '（無中文 Prompt）'))}</pre>
+                  </div>
+                </div>
+              </div>
+            `;
+          });
+
+          container.innerHTML = html;
+          section.style.display = 'block';
+        }
+      } catch(e) {
+        console.error('加載 Prompts 失敗:', e);
+      }
+    }
+
+    // ✅ 切換顯示/隱藏（zh）
+    function togglePrompt(idx, lang){
+      const el = document.getElementById(`prompt-${idx}-${lang}`);
+      if (!el) return;
+      el.classList.toggle('active');
+    }
+
+    // ✅ HTML 轉義（防止 XSS）
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    updateProgress();
+  </script>
+</body>
+</html>

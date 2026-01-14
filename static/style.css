@@ -1,0 +1,290 @@
+/* ==========================================================
+   政府 / 學術系統設計變數
+   ========================================================== */
+:root {
+  --gov-primary: #1f3a5f;      /* 深藍 */
+  --gov-secondary: #e6eef6;    /* 淡藍背景 */
+  --gov-accent: #2c6cb0;       /* 功能藍 */
+  --gov-border: #cfd8e3;
+  --gov-bg: #f5f7fa;
+  --gov-card: #ffffff;
+
+  --text-main: #1a1a1a;
+  --text-muted: #555;
+
+  --radius: 6px;
+  --shadow: 0 1px 2px rgba(0,0,0,.08);
+}
+
+/* ==========================================================
+   Reset & Base
+   ========================================================== */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+  background: var(--gov-bg);
+  color: var(--text-main);
+  line-height: 1.8;
+}
+
+/* ==========================================================
+   Typography（學術風）
+   ========================================================== */
+h1 { font-size: 26px; margin-bottom: 16px; }
+h2 { font-size: 22px; margin-bottom: 14px; }
+h3 { font-size: 18px; margin-bottom: 12px; }
+
+p, li {
+  font-size: 15px;
+  color: var(--text-main);
+}
+
+/* ==========================================================
+   Container
+   ========================================================== */
+.container {
+  max-width: 1100px;
+  margin: 40px auto;
+  background: var(--gov-card);
+  padding: 32px;
+  border: 1px solid var(--gov-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* ==========================================================
+   Buttons（政府系統標準）
+   ========================================================== */
+button,
+.btn,
+a.button {
+  background: var(--gov-primary);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 12px 0;
+  display: inline-block;
+}
+
+button:hover:not(:disabled),
+.btn:hover,
+a.button:hover {
+  background: #162c49;
+}
+
+button:disabled,
+.btn:disabled {
+  background: #9aa6b2;
+  cursor: not-allowed;
+}
+
+/* 次要按鈕 */
+.btn-secondary {
+  background: #6b7c93;
+}
+
+.btn-secondary:hover {
+  background: #5a6a7f;
+}
+
+/* ==========================================================
+   Checkbox（放大、好點）
+   ========================================================== */
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* ==========================================================
+   Index（首頁）
+   ========================================================== */
+.index-body {
+  background: var(--gov-secondary);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.index-body .container {
+  max-width: 520px;
+  text-align: center;
+}
+
+.index-body h1 {
+  color: var(--gov-primary);
+}
+
+/* ==========================================================
+   Keywords Page
+   ========================================================== */
+.keywords-body .container {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 24px;
+}
+
+.left-panel,
+.right-panel {
+  border: 1px solid var(--gov-border);
+  padding: 24px;
+  background: #fff;
+}
+
+/* 爬蟲區（進度清楚） */
+.crawl-section {
+  border: 1px solid var(--gov-border);
+  background: #f9fbfd;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.progress-bar-container {
+  background: #e1e7ef;
+  height: 10px;
+  border-radius: 5px;
+  margin-top: 12px;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--gov-accent);
+  width: 0%;
+}
+
+/* ==========================================================
+   Generate Page
+   ========================================================== */
+.progress-container {
+  background: #e1e7ef;
+  height: 28px;
+  border-radius: 14px;
+  margin: 16px 0;
+}
+
+.progress-bar {
+  background: var(--gov-accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ==========================================================
+   Manage Articles
+   ========================================================== */
+.header {
+  background: var(--gov-primary);
+  color: #fff;
+  padding: 32px;
+  text-align: center;
+}
+
+.article-card {
+  border: 1px solid var(--gov-border);
+  padding: 20px;
+  background: #fff;
+}
+
+.article-card.selected {
+  border: 2px solid var(--gov-accent);
+  background: #f0f6ff;
+}
+
+/* ==========================================================
+   View Article
+   ========================================================== */
+.meta {
+  background: #f6f8fb;
+  border-left: 4px solid var(--gov-primary);
+  padding: 20px;
+}
+
+/* ✅ SEO 區醒目 */
+.seo-section {
+  background: #e6f0fb;
+  border-left: 6px solid var(--gov-accent);
+  padding: 24px;
+  margin-top: 32px;
+}
+
+.seo-section h3 {
+  color: var(--gov-primary);
+}
+
+/* ==========================================================
+   Responsive
+   ========================================================== */
+@media (max-width: 900px) {
+  .keywords-body .container {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================
+   ✅ Prompts 顯示區域（新增）
+   ========================================================== */
+.prompts-container {
+  margin-top: 30px;
+  border-top: 2px solid #ddd;
+  padding-top: 20px;
+}
+
+.prompt-item {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.prompt-item h4 {
+  color: #0066cc;
+  margin-bottom: 10px;
+}
+
+.prompt-item pre {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 15px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.toggle-btn {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.toggle-btn:hover {
+  background: #138496;
+}
+
+.prompt-content {
+  display: none;
+}
+
+.prompt-content.active {
+  display: block;
+}

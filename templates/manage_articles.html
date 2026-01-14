@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文章管理</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="manage-body">
+  <div class="header">
+    <h1>📊 文章資料庫管理</h1>
+    <div class="stats">
+      <div class="stat-item">
+        📝 總文章數：<strong>{{ articles|length }}</strong>
+      </div>
+      <div class="stat-item">
+        ✅ 已選擇：<strong id="selectedCount">0</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <a href="/keywords" class="btn btn-primary">⬅️ 返回關鍵字頁</a>
+        {% if articles %}
+        <button class="btn btn-warning" onclick="toggleSelectAll()">
+          <span id="selectAllText">☑️ 全選</span>
+        </button>
+        <button class="btn btn-danger" id="batchDeleteBtn" onclick="batchDelete()" disabled>
+          🗑️ 批量刪除
+        </button>
+        {% endif %}
+      </div>
+      <div class="toolbar-right">
+        <div class="selection-info" id="selectionInfo">
+          資料來源：Render PostgreSQL
+        </div>
+      </div>
+    </div>
+
+    {% if articles %}
+    <div class="article-grid">
+      {% for article in articles %}
+      <div class="article-card" id="card-{{ article.id }}">
+        <input type="checkbox" class="article-checkbox" data-id="{{ article.id }}" onchange="updateSelection()">
+        <div class="article-title">{{ article.title }}</div>
+        <div class="article-meta">
+          🕒 {{ article.created_at.strftime('%Y-%m-%d %H:%M') if article.created_at else '未知時間' }}
+          <br>
+          🏷️ ID: {{ article.id }}
+        </div>
+        <div class="article-actions">
+          <a href="/view_article/{{ article.id }}" class="btn btn-info">查看詳情</a>
+          <button class="btn btn-danger" onclick="deleteArticle({{ article.id }})">刪除</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <h2>📭 資料庫是空的</h2>
+      <p>尚未生成任何文章，請先選擇關鍵字生成文章。</p>
+      <a href="/keywords" class="btn btn-primary">前往生成文章</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <script>
+    // 更新選擇狀態
+    function updateSelection() {
+      const checkboxes = document.querySelectorAll('.article-checkbox');
+      const checked = Array.from(checkboxes).filter(cb => cb.checked);
+      const count = checked.length;
+      
+      // 更新計數
+      document.getElementById('selectedCount').textContent = count;
+      
+      // 更新批量刪除按鈕狀態
+      const batchBtn = document.getElementById('batchDeleteBtn');
+      batchBtn.disabled = count === 0;
+      
+      // 更新選擇信息
+      const selectionInfo = document.getElementById('selectionInfo');
+      if (count > 0) {
+        selectionInfo.textContent = `已選擇 ${count} 篇文章`;
+        selectionInfo.classList.add('active');
+      } else {
+        selectionInfo.textContent = '資料來源：Render PostgreSQL';
+        selectionInfo.classList.remove('active');
+      }
+      
+      // 更新卡片樣式
+      checkboxes.forEach(cb => {
+        const card = document.getElementById(`card-${cb.dataset.id}`);
+        if (cb.checked) {
+          card.classList.add('selected');
+        } else {
+          card.classList.remove('selected');
+        }
+      });
+      
+      // 更新全選按鈕文字
+      const allChecked = checkboxes.length > 0 && checked.length === checkboxes.length;
+      document.getElementById('selectAllText').textContent = allChecked ? '◻️ 取消全選' : '☑️ 全選';
+    }
+    
+    // 全選/取消全選
+    function toggleSelectAll() {
+      const checkboxes = document.querySelectorAll('.article-checkbox');
+      const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+      
+      checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+      });
+      
+      updateSelection();
+    }
+    
+    // 批量刪除
+    async function batchDelete() {
+      const checkboxes = document.querySelectorAll('.article-checkbox:checked');
+      const ids = Array.from(checkboxes).map(cb => parseInt(cb.dataset.id));
+      
+      if (ids.length === 0) {
+        alert('⚠️ 請先選擇要刪除的文章');
+        return;
+      }
+      
+      if (!confirm(`⚠️ 確定要刪除 ${ids.length} 篇文章嗎？\n此操作無法復原！`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch('/batch_delete_articles', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ article_ids: ids })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          alert('✅ ' + result.message);
+          location.reload();
+        } else {
+          alert('❌ ' + result.message);
+        }
+      } catch (error) {
+        alert('❌ 發生錯誤：' + error.message);
+      }
+    }
+    
+    // 單篇刪除
+    async function deleteArticle(id) {
+      if (!confirm('確定要刪除這篇文章嗎？')) return;
+      
+      try {
+        const response = await fetch(`/delete_article/${id}`, {
+          method: 'POST'
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+          alert('✅ 文章已刪除');
+          location.reload();
+        } else {
+          alert('❌ 刪除失敗：' + result.message);
+        }
+      } catch (error) {
+        alert('❌ 發生錯誤：' + error.message);
+      }
+    }
+  </script>
+</body>
+</html>
