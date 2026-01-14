@@ -185,8 +185,8 @@
             crawlMonitoring = false;
 
             if (data.status === 'completed') {
-              status.innerText = (data.message || '✅ 完成') + ' 頁面即將自動刷新...';
-              setTimeout(() => window.location.reload(), 2000);
+              status.innerText = (data.message || '✅ 已更新') + ' 頁面即將自動刷新...';
+              await refreshKeywordsForCurrentSource();
             }
             break;
           }
@@ -265,8 +265,8 @@
             crawlHaMonitoring = false;
 
             if (data.status === 'completed') {
-              status.innerText = (data.message || '✅ 完成') + ' 頁面即將自動刷新...';
-              setTimeout(() => window.location.reload(), 2000);
+              status.innerText = (data.message || '✅ 已更新') + ' 頁面即將自動刷新...';
+              await refreshKeywordsForCurrentSource();
             }
             break;
           }
