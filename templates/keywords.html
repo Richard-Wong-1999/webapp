@@ -53,18 +53,20 @@
       <form action="/generate_articles" method="post">
         <input type="hidden" name="source" value="{{ source or 'swd' }}">
 
-        {% if keywords %}
-        <div class="keyword-list">
-          {% for kw in keywords %}
-          <div class="keyword-item">
-            <input type="checkbox" name="selected_keywords" value="{{ kw }}">
-            <label>{{ kw }}</label>
+       <div id="keywordArea">
+          {% if keywords %}
+          <div class="keyword-list" id="keywordList">
+            {% for kw in keywords %}
+            <div class="keyword-item">
+              <input type="checkbox" name="selected_keywords" value="{{ kw }}">
+              <label>{{ kw }}</label>
+            </div>
+            {% endfor %}
           </div>
-          {% endfor %}
+          {% else %}
+          <p id="keywordEmpty">目前沒有可分析的新聞資料。</p>
+          {% endif %}
         </div>
-        {% else %}
-        <p>目前沒有可分析的新聞資料。</p>
-        {% endif %}
 
         <button type="submit">生成文章</button>
       </form>
