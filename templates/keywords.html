@@ -282,6 +282,55 @@
         }
       }
     }
+
+    function getCurrentSource() {
+  // 你目前用 querystring 控制 source：/keywords?source=ha
+  const params = new URLSearchParams(window.location.search);
+  const s = (params.get("source") || "swd").toLowerCase();
+  return s === "ha" ? "ha" : "swd";
+}
+
+function renderKeywords(keywords) {
+  const area = document.getElementById("keywordArea");
+  if (!area) return;
+
+  if (!keywords || keywords.length === 0) {
+    area.innerHTML = '<p id="keywordEmpty">目前沒有可分析的新聞資料。</p>';
+    return;
+  }
+
+  const itemsHtml = keywords.map(kw => {
+    const safe = String(kw);
+    // 直接用文字節點等級的 escape 會更安全；此處先做最小替換避免破 HTML
+    const escaped = safe
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+
+    return `
+      <div class="keyword-item">
+        <input type="checkbox" name="selected_keywords" value="${escaped}">
+        <label>${escaped}</label>
+      </div>
+    `;
+  }).join("");
+
+  area.innerHTML = `<div class="keyword-list" id="keywordList">${itemsHtml}</div>`;
+}
+
+async function refreshKeywordsForCurrentSource() {
+  const source = getCurrentSource();
+  try {
+    const res = await fetch(`/keywords_json?source=${encodeURIComponent(source)}`);
+    const data = await res.json();
+    renderKeywords(data.keywords || []);
+  } catch (e) {
+    // 不要影響爬蟲流程，只提示
+    console.error("refreshKeywords error:", e);
+  }
+}
   </script>
 </body>
 </html>
