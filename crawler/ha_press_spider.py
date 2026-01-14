@@ -1,4 +1,3 @@
-# webapp/crawler/ha_press_spider.py
 from __future__ import annotations
 
 import json
@@ -17,9 +16,6 @@ import fitz  # PyMuPDF
 from zoneinfo import ZoneInfo
 
 
-# ==========================================================
-# Config
-# ==========================================================
 BASE_URL = "https://www.ha.org.hk/"
 
 DEFAULT_DAYS = 30
@@ -38,10 +34,9 @@ HEADERS = {
     "Accept-Language": "zh-HK,zh-TW;q=0.9,zh;q=0.8,en;q=0.6",
 }
 
+ProgressCb = Optional[Callable[[dict], None]]
 
-# ==========================================================
-# Types
-# ==========================================================
+
 @dataclass(frozen=True)
 class ListItem:
     title: str
@@ -65,12 +60,11 @@ class Result:
     json_path_bilingual: Optional[str] = None
 
 
-ProgressCb = Optional[Callable[[dict], None]]
-
-
-# ==========================================================
+# -----------------------------
 # URL / HTTP helpers
-# ==========================================================
+# -----------------------------
+
+
 def ensure_lang(url: str, lang: str) -> str:
     """確保 URL query 有 Lang=...（如原本有就覆蓋）。"""
     p = urlparse(url)
@@ -107,9 +101,11 @@ def http_post_html(session: requests.Session, url: str, data: dict) -> str:
     return decode_maybe_big5(r)
 
 
-# ==========================================================
+# -----------------------------
 # Parsing / extraction
-# ==========================================================
+# -----------------------------
+
+
 def extract_pdf_url_from_text(s: str) -> Optional[str]:
     if not s:
         return None
@@ -144,6 +140,7 @@ def safe_filename(name: str) -> str:
 def classify_pdf_lang(url: str) -> Optional[str]:
     """用 URL 字眼粗略判斷 PDF 屬中文定英文。"""
     u = url.lower()
+    # 常見：..._c.pdf / ..._e.pdf、chi/eng、chib5/eng
     if re.search(r"(^|[_-])c\.pdf$", u) or "chib5" in u or "chi" in u or "tc" in u:
         return "zh"
     if re.search(r"(^|[_-])e\.pdf$", u) or "eng" in u:
@@ -165,7 +162,7 @@ def extract_pdf_text(pdf_path: Path) -> str:
 
 def split_paragraphs(text: str) -> list[str]:
     """
-    以空行分段（兼容 PDF 抽出嚟好多單行的情況）：
+    以空行分段（同時兼容 PDF 抽出嚟好多單行的情況）：
     - 先按空行切段
     - 段內再合併多行成一段（用空格連）
     """
@@ -228,9 +225,11 @@ def make_bilingual_json_obj(
     }
 
 
-# ==========================================================
+# -----------------------------
 # List page scraping
-# ==========================================================
+# -----------------------------
+
+
 def parse_list_page(html: str) -> list[ListItem]:
     soup = BeautifulSoup(html, "lxml")
     items: list[ListItem] = []
@@ -309,10 +308,8 @@ def scrape_recent_list_items(
         html = http_post_html(session, post_url, data=form)
 
         if debug_dir:
-            try:
-                (debug_dir / f"list_page_{page:02d}.html").write_text(html, encoding="utf-8")
-            except Exception:
-                pass
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            (debug_dir / f"list_page_{page:02d}.html").write_text(html, encoding="utf-8")
 
         items = parse_list_page(html)
         if not items:
@@ -322,12 +319,14 @@ def scrape_recent_list_items(
         min_dt = min(page_dates)
         max_dt = max(page_dates)
 
+        new_count = 0
         for it in items:
             key = it.content_id or f"{it.published.isoformat()}|{it.title}|{it.link_url}"
             if key in seen_keys:
                 continue
             seen_keys.add(key)
             all_items.append(it)
+            new_count += 1
 
         if max_dt < cutoff:
             break
@@ -339,9 +338,11 @@ def scrape_recent_list_items(
     return recent
 
 
-# ==========================================================
+# -----------------------------
 # PDF URL resolving (bilingual)
-# ==========================================================
+# -----------------------------
+
+
 def resolve_pdf_urls_bilingual(session: requests.Session, link_url: str) -> tuple[Optional[str], Optional[str]]:
     """
     回傳 (pdf_zh, pdf_en)。
@@ -379,8 +380,6 @@ def resolve_pdf_urls_bilingual(session: requests.Session, link_url: str) -> tupl
                 zh = u
             elif lang == "en" and en is None:
                 en = u
-
-        # fallback：如果其中一邊仲未搵到，盡量揀另一條做填充
         if zh is None or en is None:
             for u in pdfs:
                 if u == zh or u == en:
@@ -430,9 +429,11 @@ def resolve_pdf_urls_bilingual(session: requests.Session, link_url: str) -> tupl
     return zh, en
 
 
-# ==========================================================
-# Public API for Flask: run_ha_crawl()
-# ==========================================================
+# -----------------------------
+# Public entry for Flask
+# -----------------------------
+
+
 def run_ha_crawl(
     *,
     out_dir: str | Path,
@@ -442,47 +443,47 @@ def run_ha_crawl(
     sleep: float = DEFAULT_SLEEP,
     overwrite: bool = True,
     progress_cb: ProgressCb = None,
+    enable_debug_html: bool = True,
 ) -> dict:
     """
-    給 Flask 呼叫的 HA 爬蟲入口：
-    - out_dir 根目錄：直接輸出 *_bilingual.json
-    - PDFs：out_dir/pdfs
-    - debug：out_dir/debug
-    - progress_cb: 會不定時回報 dict
+    供 Flask 呼叫的 HA 爬蟲。
+    會輸出：
+      - {out_dir}/pdfs/*.pdf
+      - {out_dir}/*.json  （每篇 bilingual JSON，檔名：{prefix}_bilingual.json）
+      - {out_dir}/press_releases_recent.json（摘要清單）
+      - (可選) {out_dir}/debug/list_page_XX.html
     """
     out_dir = Path(out_dir)
     pdf_dir = out_dir / "pdfs"
     debug_dir = out_dir / "debug"
-    for d in (out_dir, pdf_dir, debug_dir):
-        d.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pdf_dir.mkdir(parents=True, exist_ok=True)
+    if enable_debug_html:
+        debug_dir.mkdir(parents=True, exist_ok=True)
 
     def report(payload: dict):
         if progress_cb:
-            try:
-                progress_cb(payload)
-            except Exception:
-                pass
+            progress_cb(payload)
 
     session = requests.Session()
 
-    report({"status": "running", "message": "正在抓取 HA 新聞稿列表...", "phase": "list"})
+    report({"status": "running", "phase": "list", "message": "正在抓取 HA 新聞稿列表..."})
     items = scrape_recent_list_items(
         session=session,
         days=days,
         max_pages=max_pages,
         sleep=0.2,
-        debug_dir=debug_dir,
+        debug_dir=(debug_dir if enable_debug_html else None),
     )
     items = items[:max_items]
 
-    total = len(items)
     report(
         {
             "status": "running",
-            "message": f"列表共 {total} 筆（最近 {days} 天），開始下載 PDF / 產生 JSON...",
             "phase": "download",
-            "total": total,
+            "total": len(items),
             "completed": 0,
+            "message": f"列表共 {len(items)} 筆（最近 {days} 天），開始解析 PDF（中英）並輸出 JSON...",
         }
     )
 
@@ -492,18 +493,16 @@ def run_ha_crawl(
         report(
             {
                 "status": "running",
-                "message": f"[{i}/{total}] {it.published.isoformat()} | {it.title}",
                 "phase": "download",
-                "total": total,
+                "total": len(items),
                 "completed": i,
+                "message": f"[{i}/{len(items)}] {it.published.isoformat()} | {it.title}",
             }
         )
 
         pdf_zh_url, pdf_en_url = resolve_pdf_urls_bilingual(session, it.link_url)
 
-        # 檔名前綴：Content_ID 優先；否則用日期
         prefix = it.content_id or it.published.isoformat()
-
         pdf_path_zh: Optional[Path] = None
         pdf_path_en: Optional[Path] = None
 
@@ -517,19 +516,8 @@ def run_ha_crawl(
             name = f"{prefix}_EN_{base}"
             pdf_path_en = pdf_dir / name
 
-        # ✅ JSON 直接輸出到 out_dir 根目錄
+        # ✅ 每篇 bilingual JSON 直接放在 out_dir（符合你想要：webapp/crawler/ha_press/*.json）
         json_path = out_dir / f"{prefix}_bilingual.json"
-
-        if not pdf_zh_url and not pdf_en_url:
-            results.append(
-                Result(
-                    title=it.title,
-                    published=it.published.isoformat(),
-                    list_link_url=it.link_url,
-                    json_path_bilingual=str(json_path) if json_path.exists() else None,
-                )
-            )
-            continue
 
         # 下載 PDFs
         if pdf_zh_url and pdf_path_zh:
@@ -576,20 +564,11 @@ def run_ha_crawl(
             )
         )
 
-    # 匯總清單（根目錄）
-    out_index_json = out_dir / "press_releases_recent.json"
-    out_index_json.write_text(
+    out_json = out_dir / "press_releases_recent.json"
+    out_json.write_text(
         json.dumps([asdict(x) for x in results], ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
-    report({"status": "completed", "message": f"完成：輸出 {len(results)} 筆（含成功/失敗記錄）", "phase": "done"})
-
-    return {
-        "count_total": total,
-        "count_results": len(results),
-        "out_dir": str(out_dir),
-        "pdf_dir": str(pdf_dir),
-        "debug_dir": str(debug_dir),
-        "index_json": str(out_index_json),
-    }
+    report({"status": "completed", "phase": "done", "message": f"✅ HA 爬蟲完成：輸出 {len(results)} 篇 JSON"})
+    return {"count": len(results), "out_dir": str(out_dir)}
