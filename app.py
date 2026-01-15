@@ -1186,13 +1186,18 @@ def generate_articles():
     source = normalize_source(request.form.get("source", "swd"))
 
     if not selected_keywords or len(selected_keywords) < 1:
-        return "<h3>⚠️ 請至少選擇 1 個關鍵詞才能生成文章。</h3><a href='/keywords'>返回</a>"
+        return render_template(
+            "error.html",
+            title="未選擇關鍵詞",
+            message="⚠️ 請至少選擇 1 個關鍵詞才能生成文章。",
+            back_url="/keywords",
+            back_text="返回關鍵字頁"
+        ), 400
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     threading.Thread(target=background_generate_articles, args=(selected_keywords, timestamp, source)).start()
 
     return render_template("generate.html")
-
 
 @app.route("/progress")
 def progress():
