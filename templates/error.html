@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ title or "發生錯誤" }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    /* 讓錯誤訊息在手機上更醒目，但不破壞你原本風格 */
+    .error-wrap {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+    .error-title {
+      font-size: 20px;
+      margin-bottom: 10px;
+      color: var(--gov-primary);
+    }
+    .error-message {
+      font-size: 16px;
+      line-height: 1.8;
+      padding: 14px 16px;
+      border: 1px solid var(--gov-border);
+      border-left: 6px solid #d9534f;
+      background: #fff5f5;
+      border-radius: var(--radius);
+    }
+    .error-actions {
+      margin-top: 16px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* 手機再稍微放大一點 */
+    @media (max-width: 480px) {
+      .container { padding: 20px; margin: 18px auto; }
+      .error-title { font-size: 22px; }
+      .error-message { font-size: 17px; }
+      .btn, button { font-size: 15px; padding: 12px 18px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="error-wrap">
+      <h3 class="error-title">{{ title or "發生錯誤" }}</h3>
+      <div class="error-message">{{ message }}</div>
+
+      <div class="error-actions">
+        <a class="btn btn-secondary" href="{{ back_url or '/keywords' }}">
+          {{ back_text or "返回" }}
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
