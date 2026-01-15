@@ -258,6 +258,16 @@ def get_source_dir(source: str) -> str:
 
 
 # ==========================================================
+# ✅ Helper：解析 YYYY-MM-DD（新增）
+# ==========================================================
+def parse_ymd_date(s: str):
+    try:
+        return datetime.datetime.strptime((s or "").strip(), "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+# ==========================================================
 # ✅ Helper：從 SWD JSON 取出 title/text 的中英版本
 # ==========================================================
 def pick_bilingual_fields(data: dict):
@@ -582,27 +592,41 @@ def detect_lang_from_url(url: str) -> str:
     return "unknown"
 
 
-def fetch_swd_list(list_url: str, target_years):
+# ✅ 改成只取近 N 天（不再用 target_years）
+def fetch_swd_list(list_url: str, days: int = 30):
     html = fetch_html(list_url, timeout=30)
     soup = BeautifulSoup(html, "lxml")
     rows = soup.find_all("tr")
     press_list = []
 
+    today = datetime.date.today()
+    cutoff = today - timedelta(days=days)
+
     for row in rows:
         tds = row.find_all("td")
         if len(tds) >= 2:
             date_text = tds[0].get_text(strip=True)
-            if any(date_text.startswith(year + "-") for year in target_years):
-                a_tag = tds[1].find("a")
-                if a_tag and a_tag.get("href"):
-                    title = a_tag.get_text(strip=True)
-                    href = a_tag["href"]
-                    full_url = urljoin(list_url, href)
-                    press_list.append({
-                        "date": date_text,
-                        "title": title,
-                        "url": full_url
-                    })
+            d = parse_ymd_date(date_text)
+            if not d:
+                continue
+
+            # ✅ 只取近 N 天
+            if d < cutoff:
+                # 如果你確定列表永遠由新到舊，可改用 break 省時間
+                # break
+                continue
+
+            a_tag = tds[1].find("a")
+            if a_tag and a_tag.get("href"):
+                title = a_tag.get_text(strip=True)
+                href = a_tag["href"]
+                full_url = urljoin(list_url, href)
+                press_list.append({
+                    "date": date_text,
+                    "title": title,
+                    "url": full_url
+                })
+
     return press_list
 
 
@@ -637,27 +661,26 @@ def background_crawl_news():
         base_url_zh = "https://www.swd.gov.hk/tc/whatsnew/press/"
         base_url_en = "https://www.swd.gov.hk/en/whatsnew/press/"
 
-        current_year = datetime.datetime.now().year
-        last_year = current_year - 1
-        target_years = [str(current_year), str(last_year)]
+        # ✅ 只爬近 30 天（你可以改成參數）
+        days = 30
 
         os.makedirs(CRAWLER_DIR, exist_ok=True)
 
-        crawl_progress["message"] = "正在抓取 SWD 中英文新聞列表..."
-        zh_list = fetch_swd_list(base_url_zh, target_years)
-        en_list = fetch_swd_list(base_url_en, target_years)
+        crawl_progress["message"] = f"正在抓取 SWD 中英文新聞列表（近 {days} 天）..."
+        zh_list = fetch_swd_list(base_url_zh, days=days)
+        en_list = fetch_swd_list(base_url_en, days=days)
 
         all_items = zh_list + en_list
         total = len(all_items)
 
         crawl_progress["total"] = total
-        crawl_progress["message"] = f"發現 {total} 筆 SWD 列表項目（{last_year}-{current_year}年），開始解析 InfoGov..."
+        crawl_progress["message"] = f"發現 {total} 筆 SWD 列表項目（近 {days} 天），開始解析 InfoGov..."
 
         if total == 0:
             crawl_progress.update({
                 "running": False,
                 "status": "completed",
-                "message": "沒有找到新聞資料"
+                "message": "沒有找到近 30 天新聞資料"
             })
             # ✅ 即使沒資料，也更新一次 keywords cache（會回傳「沒有近30天新聞稿資料」）
             compute_and_store_keywords("swd", days=7)
@@ -774,7 +797,7 @@ def background_crawl_news():
         crawl_progress.update({
             "running": False,
             "status": "completed",
-            "message": f"✅ 完成！已輸出 {merged_count} 份中英對照 JSON（{last_year}-{current_year}年範圍內的 SWD 列表）。"
+            "message": f"✅ 完成！已輸出 {merged_count} 份中英對照 JSON（近 {days} 天 SWD 列表）。"
         })
 
         # ✅ 爬完立刻更新 SWD keywords cache（供前端快速切換/自動刷新）
@@ -1067,7 +1090,6 @@ def index():
 def keywords():
     source = normalize_source(request.args.get("source", "swd"))
 
-    # ✅ 先用 cache（沒有才計算）
     with keywords_cache_lock:
         cached = keywords_cache.get(source, {}) or {}
         result = cached.get("keywords") or []
