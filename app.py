@@ -344,6 +344,89 @@ def parse_date_from_item(source: str, data: dict) -> datetime.date:
 
 
 # ==========================================================
+# ✅ NEW: Reference content builders (avoid truncating EN tail)
+# ==========================================================
+def split_bilingual_block(block: str) -> dict:
+    """
+    將 make_reference_block_from_json 產生的字串 block 拆成 {"zh": "...", "en": "..."}。
+    若缺少其中一段則回傳空字串。
+    """
+    block = (block or "").strip()
+    if not block:
+        return {"zh": "", "en": ""}
+
+    # 允許 ZH/EN 任一不存在
+    m_zh = re.search(r"(【ZH｜.*?】\s*\n.*?)(?=\n\s*\n【EN｜|\Z)", block, re.S)
+    m_en = re.search(r"(【EN｜.*?】\s*\n.*?)(?=\Z)", block, re.S)
+
+    zh_part = (m_zh.group(1).strip() if m_zh else "")
+    en_part = (m_en.group(1).strip() if m_en else "")
+
+    return {"zh": zh_part, "en": en_part}
+
+
+def build_reference_content_blocks_flexible(
+    blocks: list[str],
+    max_chars_zh: int = 3800,
+    max_chars_en: int = 3800,
+    prefer_bilingual: bool = True
+) -> str:
+    """
+    組裝參考內容：
+    - 不以字元截斷整段 prompt（避免把 EN 下半截切掉）
+    - 以「每篇 block」為單位：要放就整篇放（ZH/EN 段落不切半）
+    - 優先放「中英都有」的完整篇；允許補放單語篇（真的沒有英文也放中文）
+    - 分別控制 zh/en 的總長度上限
+    """
+    blocks = blocks or []
+
+    bilingual = []
+    monolingual = []
+
+    for b in blocks:
+        parts = split_bilingual_block(b)
+        zh_b = parts["zh"].strip()
+        en_b = parts["en"].strip()
+
+        if zh_b and en_b:
+            bilingual.append((zh_b, en_b))
+        elif zh_b or en_b:
+            monolingual.append((zh_b, en_b))
+
+    ordered = (bilingual + monolingual) if prefer_bilingual else (bilingual + monolingual)
+
+    zh_out, en_out = [], []
+    zh_len = 0
+    en_len = 0
+
+    for zh_b, en_b in ordered:
+        add_zh = len(zh_b) + 5 if zh_b else 0
+        add_en = len(en_b) + 5 if en_b else 0
+
+        # 單語篇只檢查自己的上限；雙語篇需同時滿足
+        if zh_b and (zh_len + add_zh > max_chars_zh):
+            continue
+        if en_b and (en_len + add_en > max_chars_en):
+            continue
+
+        if zh_b:
+            zh_out.append(zh_b)
+            zh_len += add_zh
+        if en_b:
+            en_out.append(en_b)
+            en_len += add_en
+
+    # 以「ZH references」+「EN references」兩區塊輸出：穩定且不互相卡長度
+    content_parts = []
+    if zh_out:
+        content_parts.append("\n\n---\n\n".join(zh_out))
+    if en_out:
+        content_parts.append("\n\n---\n\n".join(en_out))
+
+    return "\n\n---\n\n".join(content_parts).strip()
+
+
+# ==========================================================
 # 讀取最近新聞文本（回傳「中英並列 block」list）
 # ==========================================================
 def get_recent_articles_text(source="swd", days=30):
@@ -890,12 +973,18 @@ def background_generate_articles(selected_keywords, timestamp, source="swd"):
 
     generated_prompts[timestamp] = []
 
+    # ✅ 改：fallback 也不做 [:2500] 截斷，改成「以篇為單位」塞入（避免英文尾巴被切掉）
     recent_blocks = get_recent_articles_text(source=source, days=30)
     if not recent_blocks:
         print("⚠️ 沒有找到近期新聞，將使用關鍵字生成")
         fallback_content = "（無可用參考資料，請基於關鍵詞生成符合香港社會福利/醫療政策背景的專業內容）"
     else:
-        fallback_content = "\n\n---\n\n".join(recent_blocks[:3])[:2500]
+        fallback_content = build_reference_content_blocks_flexible(
+            recent_blocks,
+            max_chars_zh=3800,
+            max_chars_en=3800,
+            prefer_bilingual=True
+        )
 
     lock = threading.Lock()
     results = []
@@ -906,14 +995,24 @@ def background_generate_articles(selected_keywords, timestamp, source="swd"):
 
         print(f"📝 正在生成第 {article_index + 1}/{total_articles} 篇文章（中英雙語），主題：{main_keyword}（source={source}）")
 
-        reference_blocks = get_relevant_reference_blocks(source=source, keywords=[main_keyword], days=30, limit=5)
+        # ✅ 改：limit 拉高一點，先多撈候選，再由 builder 決定放幾篇（每篇不切半）
+        reference_blocks = get_relevant_reference_blocks(source=source, keywords=[main_keyword], days=30, limit=10)
 
         if reference_blocks:
-            reference_content = "\n\n---\n\n".join(reference_blocks)[:4200]
-            print(f"✅ 為關鍵詞「{main_keyword}」找到 {len(reference_blocks)} 篇相關新聞（{source}，含中英對照）")
+            reference_content = build_reference_content_blocks_flexible(
+                reference_blocks,
+                max_chars_zh=3800,
+                max_chars_en=3800,
+                prefer_bilingual=True
+            )
+            if reference_content:
+                print(f"✅ 為關鍵詞「{main_keyword}」找到相關新聞（{source}），已組裝參考資料（不截斷段落）")
+            else:
+                reference_content = fallback_content
+                print(f"⚠️ 「{main_keyword}」相關新聞無法組出可用參考（可能全為空/解析失敗），改用 fallback")
         else:
             reference_content = fallback_content
-            print(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（{source}，含中英）")
+            print(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（{source}）")
 
         prompt_zh = (
             "你是一位香港地區的專業內容寫作顧問與 SEO 專家。\n\n"
