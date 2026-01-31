@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc:*)",
+      "Bash(tree:*)",
+      "Bash(python validate_refactoring.py:*)",
+      "Bash(python:*)"
+    ]
+  }
+}

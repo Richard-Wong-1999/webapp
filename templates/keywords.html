@@ -123,6 +123,28 @@
 
   <script>
     // ============================================================
+    // ✅ 指數退避輪詢工具函數
+    // ============================================================
+    async function pollWithBackoff(fetchFn, callback, maxInterval = 5000) {
+      let interval = 1000;  // 初始1秒
+
+      while (true) {
+        try {
+          const shouldContinue = await callback();
+          if (!shouldContinue) break;
+
+          await new Promise(resolve => setTimeout(resolve, interval));
+
+          // 逐漸增加間隔到最大值
+          interval = Math.min(interval * 1.2, maxInterval);
+        } catch (error) {
+          console.error('Polling error:', error);
+          break;
+        }
+      }
+    }
+
+    // ============================================================
     // 全域狀態：source tabs + keyword selection per source（方案 B）
     // ============================================================
     let activeSource = ("{{ source or 'swd' }}").toLowerCase() === "ha" ? "ha" : "swd";
@@ -338,44 +360,33 @@
       const progressBar = document.getElementById('crawlProgressBar');
       const progressContainer = document.getElementById('crawlProgressContainer');
 
-      while (true) {
-        try {
-          const response = await fetch('/crawl_progress');
-          const data = await response.json();
+      await pollWithBackoff(null, async () => {
+        const response = await fetch('/crawl_progress');
+        const data = await response.json();
 
-          status.innerText = data.message || '';
+        status.innerText = data.message || '';
 
-          if (data.total > 0) {
-            const percent = Math.round((data.completed / data.total) * 100);
-            progressBar.style.width = percent + '%';
-          }
+        if (data.total > 0) {
+          const percent = Math.round((data.completed / data.total) * 100);
+          progressBar.style.width = percent + '%';
+        }
 
-          // running=false 表示結束（completed / error / idle）
-          if (!data.running) {
-            btn.disabled = false;
-            btn.innerText = '📥 爬取 SWD 最新新聞稿';
-            crawlMonitoring = false;
-
-            if (data.status === 'completed') {
-              status.innerText = (data.message || '✅ 已更新') + '（SWD 關鍵字將自動更新）';
-              await refreshKeywordsForSource("swd", { force: true });
-            }
-
-            // 停留一下進度條也可以（看你要不要）
-            // progressContainer.style.display = 'none';
-            break;
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (error) {
-          status.innerText = '❌ 監控 SWD 進度時發生錯誤';
+        // running=false 表示結束（completed / error / idle）
+        if (!data.running) {
           btn.disabled = false;
           btn.innerText = '📥 爬取 SWD 最新新聞稿';
           crawlMonitoring = false;
-          progressContainer.style.display = 'block';
-          break;
+
+          if (data.status === 'completed') {
+            status.innerText = (data.message || '✅ 已更新') + '（SWD 關鍵字將自動更新）';
+            await refreshKeywordsForSource("swd", { force: true });
+          }
+
+          return false;  // 停止輪詢
         }
-      }
+
+        return true;  // 繼續輪詢
+      });
     }
 
     // ============================================================
@@ -423,42 +434,32 @@
       const progressBar = document.getElementById('crawlHaProgressBar');
       const progressContainer = document.getElementById('crawlHaProgressContainer');
 
-      while (true) {
-        try {
-          const response = await fetch('/crawl_progress_ha');
-          const data = await response.json();
+      await pollWithBackoff(null, async () => {
+        const response = await fetch('/crawl_progress_ha');
+        const data = await response.json();
 
-          status.innerText = data.message || '';
+        status.innerText = data.message || '';
 
-          if (data.total > 0) {
-            const percent = Math.round((data.completed / data.total) * 100);
-            progressBar.style.width = percent + '%';
-          }
+        if (data.total > 0) {
+          const percent = Math.round((data.completed / data.total) * 100);
+          progressBar.style.width = percent + '%';
+        }
 
-          if (!data.running) {
-            btn.disabled = false;
-            btn.innerText = '📥 爬取 HA 新聞稿';
-            crawlHaMonitoring = false;
-
-            if (data.status === 'completed') {
-              status.innerText = (data.message || '✅ 已更新') + '（HA 關鍵字將自動更新）';
-              await refreshKeywordsForSource("ha", { force: true });
-            }
-
-            // progressContainer.style.display = 'none';
-            break;
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (error) {
-          status.innerText = '❌ 監控 HA 進度時發生錯誤';
+        if (!data.running) {
           btn.disabled = false;
           btn.innerText = '📥 爬取 HA 新聞稿';
           crawlHaMonitoring = false;
-          progressContainer.style.display = 'block';
-          break;
+
+          if (data.status === 'completed') {
+            status.innerText = (data.message || '✅ 已更新') + '（HA 關鍵字將自動更新）';
+            await refreshKeywordsForSource("ha", { force: true });
+          }
+
+          return false;  // 停止輪詢
         }
-      }
+
+        return true;  // 繼續輪詢
+      });
     }
 
     // ============================================================

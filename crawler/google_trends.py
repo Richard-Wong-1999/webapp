@@ -25,11 +25,12 @@ def get_google_trends_data(keyword: str, geo="HK", hl="zh-TW"):
 
     # ========== Chrome 设置 ==========
     chrome_opts = Options()
-    # ⚠️ 先暫時註解掉 headless 看是否有 CAPTCHA 或不同版面
-    # chrome_opts.add_argument("--headless=new")
+    # ✅ 啟用無頭模式以節省資源
+    chrome_opts.add_argument("--headless=new")
     chrome_opts.add_argument("--disable-gpu")
     chrome_opts.add_argument("--no-sandbox")
-    chrome_opts.add_argument("--window-size=1920,1080")
+    chrome_opts.add_argument("--disable-dev-shm-usage")
+    chrome_opts.add_argument("--window-size=1366,768")  # 減少視窗大小
     chrome_opts.add_argument("--lang=zh-TW")
 
     driver = None

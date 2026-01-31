@@ -61,12 +61,27 @@
   <script>
     let promptsLoaded = false;
 
+    // ✅ 指數退避輪詢
+    async function pollWithBackoff(callback, maxInterval = 5000) {
+      let interval = 1000;  // 初始1秒
+
+      while (true) {
+        const shouldContinue = await callback();
+        if (!shouldContinue) break;
+
+        await new Promise(resolve => setTimeout(resolve, interval));
+
+        // 逐漸增加間隔到最大值
+        interval = Math.min(interval * 1.2, maxInterval);
+      }
+    }
+
     async function updateProgress(){
       const txt = document.getElementById('progress-text');
       const bar = document.getElementById('progress-bar');
       const list = document.getElementById('title-list');
 
-      while(true){
+      await pollWithBackoff(async () => {
         const res = await fetch('/progress');
         const data = await res.json();
 
@@ -86,9 +101,8 @@
           loadPrompts();
         }
 
-        if(!data.running) break;
-        await new Promise(r => setTimeout(r, 1000));
-      }
+        return data.running;  // 返回是否繼續輪詢
+      });
     }
 
     // ✅ 加載 Prompts（支援 prompt = {zh} 或舊版 prompt = "..."）
