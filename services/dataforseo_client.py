@@ -145,12 +145,12 @@ class DataForSEOClient:
         # 地區代碼映射
         location_code = 2344 if geo == "HK" else None  # Hong Kong
 
-        # 取得相關主題（移除 type 限制以獲取所有數據）
+        # 取得相關主題
+        # 注意：根據 DataForSEO API，Google Trends 的參數格式與文檔可能不同
+        # 使用最簡化的參數格式
         topics_data = [{
             "keyword": keyword,
-            "location_code": location_code,
-            "language_code": "zh-TW"
-            # 不指定 type，以獲取 rising 和 top 數據
+            "location_code": location_code
         }]
 
         topics_result = self._make_request(
@@ -214,17 +214,7 @@ class DataForSEOClient:
         topics, queries = parse_trends_result(topics_result)
         logger.info(f"[Trends] Parsed topics: {len(topics)}, queries: {len(queries)}")
 
-        # 如果 zh-TW 沒有數據，嘗試使用英文
-        if not topics and not queries and not topics_result.get("error"):
-            logger.info("[Trends] No data for zh-TW, trying 'en'")
-            topics_data[0]["language_code"] = "en"
-            topics_result_en = self._make_request(
-                "POST",
-                "keywords_data/google_trends/explore/live",
-                topics_data
-            )
-            topics, queries = parse_trends_result(topics_result_en)
-            logger.info(f"[Trends] EN fallback - topics: {len(topics)}, queries: {len(queries)}")
+        # 注意：移除了語言備選邏輯，因為 API 不接受 language_code 參數
 
         return {
             "keyword": keyword,
@@ -237,7 +227,7 @@ class DataForSEOClient:
         self,
         keyword: str,
         location_code: int = 2344,  # Hong Kong
-        language_code: str = "zh-TW",
+        language_code: str = None,  # 不再使用
         limit: int = 50
     ) -> List[Dict[str, Any]]:
         """取得關鍵字建議
@@ -245,16 +235,16 @@ class DataForSEOClient:
         Args:
             keyword: 種子關鍵字
             location_code: 位置代碼（2344 = 香港）
-            language_code: 語言代碼
+            language_code: （已廢棄）此 API 不接受此參數
             limit: 返回數量限制
 
         Returns:
             [{"keyword": str, "search_volume": int, "cpc": float, "competition": float}]
         """
+        # 注意：移除 language_code 參數
         data = [{
             "keyword": keyword,
             "location_code": location_code,
-            "language_code": language_code,
             "include_seed_keyword": True,
             "limit": limit
         }]
@@ -292,14 +282,14 @@ class DataForSEOClient:
         self,
         keywords: List[str],
         location_code: int = 2344,  # Hong Kong
-        language_code: str = "zh-TW"
+        language_code: str = None  # 不再使用，保留參數以向後兼容
     ) -> List[Dict[str, Any]]:
         """取得關鍵字指標（搜尋量、CPC、競爭度）
 
         Args:
             keywords: 關鍵字列表
             location_code: 位置代碼
-            language_code: 語言代碼
+            language_code: （已廢棄）Google Ads API 不接受此參數
 
         Returns:
             [{"keyword": str, "search_volume": int, "cpc": float, "competition": float, "competition_level": str}]
@@ -310,10 +300,10 @@ class DataForSEOClient:
         # DataForSEO 限制每次最多 1000 個關鍵字
         keywords = keywords[:1000]
 
+        # 注意：Google Ads API 不接受 language_code 參數
         data = [{
             "keywords": keywords,
-            "location_code": location_code,
-            "language_code": language_code
+            "location_code": location_code
         }]
 
         result = self._make_request(
