@@ -91,37 +91,23 @@
       {% endif %}
     </div>
 
-    <!-- Selenium Chrome 狀態 -->
-    <div class="debug-section">
-      <h2>2. Selenium / Chrome（用於 Google Trends 爬蟲）</h2>
-      <p><strong>狀態：</strong>
-        {% if selenium_available %}
-          <span class="status-ok">✅ Selenium 已安裝</span>
-        {% else %}
-          <span class="status-error">❌ Selenium 未安裝</span>
-        {% endif %}
-      </p>
+    <!-- API 使用說明 -->
+    <div class="debug-section" style="background: #e8f5e9;">
+      <h2>2. API 使用建議</h2>
+      <p><strong>✅ 重要提示：</strong></p>
+      <ul style="line-height: 1.8; margin-left: 20px;">
+        <li><strong>使用中文關鍵字</strong>：DataForSEO API 針對香港地區，中文關鍵字效果最好</li>
+        <li><strong>避免冷門詞彙</strong>：過於專業或搜尋量低的關鍵字可能返回空數據</li>
+        <li><strong>建議測試關鍵字</strong>：長者、健康、護理、醫療服務、安老院</li>
+        <li><strong>英文關鍵字限制</strong>：在香港地區可能數據較少</li>
+      </ul>
 
-      <p><strong>Chrome/Chromium：</strong> {{ chrome_status }}</p>
-
-      {% if not selenium_available or 'not found' in chrome_status.lower() %}
-        <div class="debug-code">
-          <strong>Render 配置步驟：</strong><br><br>
-          1. 在專案根目錄創建 <code>aptfile</code>：<br>
-          <pre>chromium
-chromium-driver</pre><br>
-
-          2. 在 <code>requirements.txt</code> 中添加：<br>
-          <pre>selenium==4.16.0
-webdriver-manager==4.0.1</pre><br>
-
-          3. 修改 <code>crawler/google_trends.py</code>：<br>
-          <pre>chrome_opts.binary_location = "/usr/bin/chromium"</pre>
-        </div>
-      {% endif %}
-
-      <button class="test-btn" onclick="testSelenium()">🧪 測試 Selenium</button>
-      <div id="seleniumTestResult"></div>
+      <div class="debug-code" style="margin-top: 15px; background: #fff;">
+        <strong>📊 數據返回說明：</strong><br><br>
+        • <strong>Trends Topics/Queries: 0</strong> → 該關鍵字在香港地區 Google Trends 數據不足<br>
+        • <strong>關鍵字指標未返回數據</strong> → 該關鍵字搜尋量過低或不在 Google Ads 資料庫中<br>
+        • <strong>SERP 有機結果 > 0</strong> → 正常，表示 API 可以獲取搜尋結果<br>
+      </div>
     </div>
 
     <!-- API 測試工具 -->
@@ -130,8 +116,19 @@ webdriver-manager==4.0.1</pre><br>
 
       <div style="margin-bottom: 15px;">
         <label><strong>測試關鍵字：</strong></label>
-        <input type="text" id="testKeyword" placeholder="例如：長者"
+        <input type="text" id="testKeyword" placeholder="例如：長者" value="長者"
                style="width: 200px; padding: 8px; margin-left: 10px; border: 1px solid #ccc; border-radius: 4px;">
+        <small style="display: block; margin-top: 5px; color: #666;">
+          💡 預填「長者」，這是高搜尋量的香港地區關鍵字
+        </small>
+      </div>
+
+      <div style="margin-bottom: 15px;">
+        <strong>快速測試：</strong>
+        <button class="test-btn" style="background: #6c757d; margin: 5px;" onclick="setKeyword('長者')">長者</button>
+        <button class="test-btn" style="background: #6c757d; margin: 5px;" onclick="setKeyword('健康')">健康</button>
+        <button class="test-btn" style="background: #6c757d; margin: 5px;" onclick="setKeyword('護理')">護理</button>
+        <button class="test-btn" style="background: #6c757d; margin: 5px;" onclick="setKeyword('醫療服務')">醫療服務</button>
       </div>
 
       <button class="test-btn" onclick="testTrends()">🧪 測試 Google Trends API</button>
@@ -147,6 +144,10 @@ webdriver-manager==4.0.1</pre><br>
   </div>
 
   <script>
+    function setKeyword(keyword) {
+      document.getElementById('testKeyword').value = keyword;
+    }
+
     async function testDataForSEO() {
       const resultDiv = document.getElementById('testResult');
       resultDiv.innerHTML = '⏳ 測試中...';
@@ -166,28 +167,6 @@ webdriver-manager==4.0.1</pre><br>
         } else {
           resultDiv.className = 'test-result error';
           resultDiv.innerHTML = `❌ ${data.message || '測試失敗'}`;
-        }
-      } catch (e) {
-        resultDiv.className = 'test-result error';
-        resultDiv.innerHTML = `❌ 請求錯誤: ${e.message}`;
-      }
-    }
-
-    async function testSelenium() {
-      const resultDiv = document.getElementById('seleniumTestResult');
-      resultDiv.innerHTML = '⏳ 測試中...';
-      resultDiv.className = 'test-result';
-
-      try {
-        const res = await fetch('/api/debug/test_selenium');
-        const data = await res.json();
-
-        if (data.success) {
-          resultDiv.className = 'test-result success';
-          resultDiv.innerHTML = `✅ ${data.message}`;
-        } else {
-          resultDiv.className = 'test-result error';
-          resultDiv.innerHTML = `❌ ${data.message}`;
         }
       } catch (e) {
         resultDiv.className = 'test-result error';

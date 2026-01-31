@@ -48,7 +48,6 @@ from services.article_generator import (
 from utils import logger, cache_manager
 
 # 爬蟲
-from crawler.google_trends import get_google_trends_data
 from crawler.ha_press_spider import run_ha_crawl
 
 # 從原 app.py 導入 SWD 爬蟲相關函數（暫時保留，之後可移到 services/crawler_service.py）
@@ -175,14 +174,7 @@ def keywords():
     if not result:
         result = compute_and_store_keywords(source=source, days=7)
 
-    trend_topic = ""
-    trends = None
-    if request.method == "POST":
-        trend_topic = request.form.get("trend_topic", "").strip()
-        if trend_topic:
-            trends = get_google_trends_data(keyword=trend_topic, geo="HK")
-
-    return render_template("keywords.html", keywords=result, trends=trends, trend_topic=trend_topic, source=source)
+    return render_template("keywords.html", keywords=result, source=source)
 
 
 @app.route("/keywords_json", methods=["GET"])

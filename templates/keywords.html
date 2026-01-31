@@ -146,41 +146,52 @@
       </p>
     </div>
 
-    <!-- 右區：Google 趨勢 -->
+    <!-- 右區：SEO 工具說明 -->
     <div class="right-panel">
-      <h2>📈 Google 趨勢（香港）</h2>
+      <h2>📊 SEO 關鍵字工具</h2>
 
-      <form method="post" action="/keywords{% if source %}?source={{ source }}{% endif %}">
-        <input type="text" name="trend_topic" placeholder="長者、健康護理等方面的趨勢...">
-        <button type="submit">搜尋趨勢</button>
-      </form>
+      <div style="padding: 20px; background: #f8f9fa; border-radius: 8px;">
+        <h3 style="margin-top: 0;">💡 使用說明</h3>
 
-      {% if trend_topic %}
-        <h3>🔍 搜索結果：「{{ trend_topic }}」</h3>
-        {% if trends %}
-          <h4>📘 相關主題</h4>
-          {% if trends.topics %}
-            {% for item in trends.topics %}
-              <div>{{ loop.index }}. {{ item.topic_title }} <small>{{ item.type }}</small></div>
-            {% endfor %}
-          {% else %}
-            <p>暫無主題資料。</p>
-          {% endif %}
+        <p><strong>🔍 SEO 關鍵字研究</strong></p>
+        <ul style="line-height: 1.8;">
+          <li>分析關鍵字的搜尋量、CPC、競爭程度</li>
+          <li>查看 Google Trends 相關查詢</li>
+          <li>獲取相關關鍵字建議</li>
+          <li>點擊建議關鍵字可加入生成清單</li>
+        </ul>
 
-          <h4>📈 相關搜尋</h4>
-          {% if trends.queries %}
-            {% for item in trends.queries %}
-              <div>{{ loop.index }}. {{ item.query }} <small>{{ item.value }}</small></div>
-            {% endfor %}
-          {% else %}
-            <p>暫無搜尋資料。</p>
-          {% endif %}
-        {% else %}
-          <p>未能取得「{{ trend_topic }}」的趨勢資料，可能搜尋量過低。</p>
-        {% endif %}
-      {% else %}
-        <div class="trend-placeholder"></div>
-      {% endif %}
+        <p><strong>📝 文章生成</strong></p>
+        <ul style="line-height: 1.8;">
+          <li><strong>SWD/HA 關鍵字</strong>：使用新聞稿作為參考資料</li>
+          <li><strong>SEO 研究關鍵字</strong>：使用搜尋結果作為參考資料</li>
+        </ul>
+
+        <hr style="margin: 20px 0; opacity: 0.3;">
+
+        <h3>🔧 系統狀態</h3>
+        <div style="margin-bottom: 10px;">
+          <span style="color: #28a745; font-weight: bold;">✅</span>
+          DataForSEO API 已配置
+        </div>
+        <a href="/debug/seo" style="color: var(--gov-accent); text-decoration: underline;">
+          🔍 查看診斷詳情
+        </a>
+
+        <hr style="margin: 20px 0; opacity: 0.3;">
+
+        <h3>💡 建議關鍵字</h3>
+        <p style="font-size: 13px; color: #666;">
+          在 SEO 關鍵字研究中嘗試以下關鍵字以獲得最佳效果：
+        </p>
+        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
+          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">長者</span>
+          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">健康</span>
+          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">護理</span>
+          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">醫療服務</span>
+          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">安老院</span>
+        </div>
+      </div>
     </div>
   </div>
 
