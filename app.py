@@ -859,9 +859,9 @@ def raw_api_test():
         # 直接調用底層 API 並返回完整回應
         if api_type == "trends":
             endpoint = "keywords_data/google_trends/explore/live"
-            # Google Trends API 不接受 language_code
+            # Google Trends API 需要 "keywords" (複數) 參數，數組格式
             request_data = [{
-                "keyword": keyword,
+                "keywords": [keyword],  # 修正：使用複數形式
                 "location_code": 2344
             }]
         elif api_type == "metrics":
@@ -873,9 +873,9 @@ def raw_api_test():
             }]
         elif api_type == "suggestions":
             endpoint = "keywords_data/google_ads/keywords_for_keywords/live"
-            # Google Ads 關鍵字建議 API 不接受 language_code
+            # Google Ads 關鍵字建議 API 需要 "keywords" (複數) 參數
             request_data = [{
-                "keyword": keyword,
+                "keywords": [keyword],  # 修正：使用複數形式
                 "location_code": 2344,
                 "include_seed_keyword": True,
                 "limit": 20

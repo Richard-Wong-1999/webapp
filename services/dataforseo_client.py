@@ -146,10 +146,10 @@ class DataForSEOClient:
         location_code = 2344 if geo == "HK" else None  # Hong Kong
 
         # 取得相關主題
-        # 注意：根據 DataForSEO API，Google Trends 的參數格式與文檔可能不同
-        # 使用最簡化的參數格式
+        # 注意：Google Trends API 需要 "keywords" (複數) 參數，格式為數組
+        # 最多支援 5 個關鍵字
         topics_data = [{
-            "keyword": keyword,
+            "keywords": [keyword],  # 修正：使用複數形式，數組格式
             "location_code": location_code
         }]
 
@@ -241,9 +241,9 @@ class DataForSEOClient:
         Returns:
             [{"keyword": str, "search_volume": int, "cpc": float, "competition": float}]
         """
-        # 注意：移除 language_code 參數
+        # 注意：API 需要 "keywords" (複數) 參數，格式為數組
         data = [{
-            "keyword": keyword,
+            "keywords": [keyword],  # 修正：使用複數形式，數組格式
             "location_code": location_code,
             "include_seed_keyword": True,
             "limit": limit
