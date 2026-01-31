@@ -39,7 +39,10 @@ from services.seo_orchestrator import (
     seo_analysis_progress
 )
 from services.dataforseo_client import dataforseo_client
-from services.article_generator import generate_single_article_with_seo
+from services.article_generator import (
+    generate_single_article_with_seo,
+    background_generate_articles_by_source
+)
 
 # 工具
 from utils import logger, cache_manager
@@ -272,9 +275,14 @@ def get_crawl_progress_ha():
 # ==========================================================
 @app.route("/generate_articles", methods=["POST"])
 def generate_articles():
-    """生成文章"""
+    """生成文章（根據關鍵字來源選擇參考資料）"""
     selected_keywords = request.form.getlist("selected_keywords")
     source = normalize_source(request.form.get("source", "swd"))
+    keyword_source = request.form.get("keyword_source", source)
+
+    # 標準化 keyword_source
+    if keyword_source not in ('swd', 'ha', 'seo', 'trends'):
+        keyword_source = source
 
     if not selected_keywords or len(selected_keywords) < 1:
         return render_template(
@@ -286,9 +294,11 @@ def generate_articles():
         ), 400
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    # 使用新的根據來源生成函數
     threading.Thread(
-        target=background_generate_articles,
-        args=(selected_keywords, timestamp, source)
+        target=background_generate_articles_by_source,
+        args=(selected_keywords, timestamp, keyword_source)
     ).start()
 
     return render_template("generate.html")
@@ -575,165 +585,6 @@ def seo_analysis_result():
     except Exception as e:
         logger.error(f"SEO analysis result error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
-
-
-# ==========================================================
-# 路由：SEO 增強文章生成
-# ==========================================================
-@app.route("/generate_articles_seo", methods=["POST"])
-def generate_articles_seo():
-    """使用 SEO 數據增強的文章生成"""
-    selected_keywords = request.form.getlist("selected_keywords")
-    source = normalize_source(request.form.get("source", "swd"))
-    use_seo = request.form.get("use_seo", "0") == "1"
-
-    if not selected_keywords or len(selected_keywords) < 1:
-        return render_template(
-            "error.html",
-            title="未選擇關鍵詞",
-            message="請至少選擇 1 個關鍵詞才能生成文章。",
-            back_url="/keywords",
-            back_text="返回關鍵字頁"
-        ), 400
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-    if use_seo and dataforseo_client.is_configured():
-        # 使用 SEO 增強生成
-        threading.Thread(
-            target=background_generate_articles_seo,
-            args=(selected_keywords, timestamp, source)
-        ).start()
-    else:
-        # 使用原本的生成方式
-        threading.Thread(
-            target=background_generate_articles,
-            args=(selected_keywords, timestamp, source)
-        ).start()
-
-    return render_template("generate.html")
-
-
-def background_generate_articles_seo(
-    selected_keywords: list,
-    timestamp: str,
-    source: str = "swd"
-):
-    """背景生成 SEO 增強文章"""
-    from services.article_generator import (
-        article_generation_progress,
-        generated_prompts,
-        generated_prompts_lock
-    )
-    from services.keyword_extractor import get_recent_articles_text, get_relevant_reference_blocks
-    from utils.text_processing import build_reference_content_blocks_flexible
-    from services.database import insert_article
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-    import re
-
-    total_articles = len(selected_keywords)
-
-    # 初始化進度
-    article_generation_progress.update(
-        total=total_articles,
-        completed=0,
-        running=True,
-        timestamp=timestamp,
-        titles=[]
-    )
-
-    with generated_prompts_lock:
-        generated_prompts[timestamp] = []
-
-    logger.info(f"開始生成 {total_articles} 篇 SEO 增強文章（source={source}）")
-
-    # 準備備用內容
-    recent_blocks = get_recent_articles_text(source=source, days=30)
-    if not recent_blocks:
-        fallback_content = "（無可用參考資料，請基於關鍵詞生成符合香港社會福利/醫療政策背景的專業內容）"
-    else:
-        fallback_content = build_reference_content_blocks_flexible(
-            recent_blocks,
-            max_chars_zh=Config.MAX_CHARS_ZH,
-            max_chars_en=Config.MAX_CHARS_EN,
-            prefer_bilingual=True
-        )
-
-    results = []
-
-    # 使用線程池生成文章
-    with ThreadPoolExecutor(max_workers=Config.ARTICLE_GENERATION_WORKERS) as executor:
-        futures = [
-            executor.submit(
-                generate_single_article_with_seo,
-                i,
-                selected_keywords[i],
-                source,
-                timestamp,
-                total_articles,
-                fallback_content
-            )
-            for i in range(total_articles)
-        ]
-
-        for future in as_completed(futures):
-            try:
-                results.append(future.result())
-            except Exception as e:
-                logger.error(f"文章生成失敗：{e}")
-
-    # 解析並儲存文章
-    all_articles = []
-    for idx, output_text, chosen_kws in sorted(results, key=lambda x: x[0]):
-        try:
-            match = re.search(r'\[.*\]', output_text, re.S)
-            parsed = json.loads(match.group(0)) if match else json.loads(output_text)
-
-            if not isinstance(parsed, list):
-                parsed = [parsed]
-
-            for item in parsed:
-                if item.get("keywords") != chosen_kws:
-                    item["keywords"] = chosen_kws
-
-                zh = item.get("zh") or {}
-                en = item.get("en") or {}
-
-                record = {
-                    "title_zh": (zh.get("title") or "").strip(),
-                    "body_zh": (zh.get("body") or "").strip(),
-                    "meta_title_zh": (zh.get("meta_title") or "").strip(),
-                    "meta_description_zh": (zh.get("meta_description") or "").strip(),
-                    "title_en": (en.get("title") or "").strip(),
-                    "body_en": (en.get("body") or "").strip(),
-                    "meta_title_en": (en.get("meta_title") or "").strip(),
-                    "meta_description_en": (en.get("meta_description") or "").strip(),
-                    "keywords": json.dumps(item.get("keywords", chosen_kws), ensure_ascii=False),
-                    "timestamp": timestamp
-                }
-
-                record["title"] = record["title_zh"] or "未命名"
-                record["body"] = record["body_zh"] or ""
-                record["meta_title"] = record["meta_title_zh"] or ""
-                record["meta_description"] = record["meta_description_zh"] or ""
-
-                all_articles.append(record)
-
-        except Exception as e:
-            logger.error(f"解析錯誤：{e}")
-            continue
-
-    # 批次插入資料庫
-    for art in all_articles:
-        result = insert_article(art)
-        if result.get("success"):
-            title = art.get("title_zh") or art.get("title") or "未命名"
-            article_generation_progress.titles.append(title)
-
-    logger.info(f"成功儲存 {len(all_articles)} 篇 SEO 增強文章到資料庫")
-
-    # 完成
-    article_generation_progress.update(running=False)
 
 
 @app.route("/api/seo/status", methods=["GET"])

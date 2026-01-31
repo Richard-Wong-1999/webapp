@@ -71,9 +71,45 @@
       </div>
     </div>
 
+    <!-- Prompts 顯示區塊 -->
+    {% if article.prompt_zh or article.prompt_en %}
+    <div class="prompts-container">
+      <h2>📜 發送給 AI 的指令（Prompts）</h2>
+
+      {% if article.prompt_zh %}
+      <div class="prompt-item">
+        <h4>繁體中文 Prompt</h4>
+        <button class="toggle-btn" onclick="togglePromptContent('prompt-zh')">展開/收起</button>
+        <div id="prompt-zh" class="prompt-content">
+          <pre>{{ article.prompt_zh }}</pre>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if article.prompt_en %}
+      <div class="prompt-item">
+        <h4>English Prompt</h4>
+        <button class="toggle-btn" onclick="togglePromptContent('prompt-en')">展開/收起</button>
+        <div id="prompt-en" class="prompt-content">
+          <pre>{{ article.prompt_en }}</pre>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
     <div style="margin-top: 30px;">
       <a href="/manage_articles" class="btn btn-primary">⬅️ 返回管理頁</a>
     </div>
   </div>
+
+  <script>
+    function togglePromptContent(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.toggle('active');
+      }
+    }
+  </script>
 </body>
 </html>

@@ -166,6 +166,10 @@ def init_database():
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS meta_description_zh TEXT")
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS meta_description_en TEXT")
 
+        # 添加 prompt 欄位（用於記錄生成文章時使用的 prompt）
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS prompt_zh TEXT")
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS prompt_en TEXT")
+
         # 添加索引以提升查詢效能
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_articles_created_at
@@ -358,9 +362,10 @@ def insert_article(conn, article_data: Dict) -> Dict:
         INSERT INTO articles (
             title, body, meta_title, meta_description, keywords, timestamp,
             title_zh, body_zh, meta_title_zh, meta_description_zh,
-            title_en, body_en, meta_title_en, meta_description_en
+            title_en, body_en, meta_title_en, meta_description_en,
+            prompt_zh, prompt_en
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
     """, (
         article_data.get("title", "未命名"),
@@ -376,7 +381,9 @@ def insert_article(conn, article_data: Dict) -> Dict:
         article_data.get("title_en", ""),
         article_data.get("body_en", ""),
         article_data.get("meta_title_en", ""),
-        article_data.get("meta_description_en", "")
+        article_data.get("meta_description_en", ""),
+        article_data.get("prompt_zh", ""),
+        article_data.get("prompt_en", "")
     ))
 
     article_id = cur.fetchone()[0]

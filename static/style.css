@@ -288,3 +288,269 @@ input[type="checkbox"] {
 .prompt-content.active {
   display: block;
 }
+
+/* ==========================================================
+   SEO 關鍵字研究區塊樣式（全域）
+   ========================================================== */
+.seo-research-section {
+  background: linear-gradient(135deg, var(--gov-primary) 0%, #2c4a7a 100%);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+  color: white;
+}
+
+.seo-research-section h2 {
+  margin: 0 0 15px 0;
+  font-size: 18px;
+  color: white;
+}
+
+.seo-input-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.seo-input-row input {
+  flex: 1;
+  padding: 10px 15px;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+
+.seo-input-row button {
+  padding: 10px 20px;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  color: white;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.seo-input-row button:hover:not(:disabled) {
+  background: rgba(255,255,255,0.3);
+}
+
+.seo-input-row button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* SEO 結果面板 */
+#seoResearchResults {
+  display: none;
+  background: rgba(255,255,255,0.1);
+  border-radius: var(--radius);
+  padding: 15px;
+  margin-top: 10px;
+}
+
+#seoResearchResults.active {
+  display: block;
+}
+
+.seo-panel {
+  margin-bottom: 15px;
+  padding: 12px;
+  background: rgba(255,255,255,0.1);
+  border-radius: var(--radius);
+}
+
+.seo-panel h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  opacity: 0.9;
+  color: white;
+}
+
+.seo-metrics {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.seo-metric {
+  text-align: center;
+  padding: 8px 15px;
+  background: rgba(255,255,255,0.15);
+  border-radius: var(--radius);
+}
+
+.seo-metric-value {
+  font-size: 20px;
+  font-weight: bold;
+  color: white;
+}
+
+.seo-metric-label {
+  font-size: 11px;
+  opacity: 0.8;
+  color: white;
+}
+
+.seo-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.seo-tag {
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 12px;
+  font-size: 12px;
+  color: white;
+}
+
+.seo-suggestion-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  margin-bottom: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  color: white;
+}
+
+.seo-suggestion-item:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.seo-suggestion-keyword {
+  flex: 1;
+}
+
+.seo-suggestion-metrics {
+  display: flex;
+  gap: 10px;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* SEO Badge 樣式 */
+.seo-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-left: 8px;
+}
+
+.seo-badge.volume {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.seo-badge.competition {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.seo-badge.competition.LOW {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.seo-badge.competition.MEDIUM {
+  background: #fff3e0;
+  color: #ef6c00;
+}
+
+.seo-badge.competition.HIGH {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* 關鍵字項目增強 */
+.keyword-item-enhanced {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: #f8f9fa;
+  border-radius: var(--radius);
+  margin-bottom: 6px;
+  transition: background 0.2s;
+}
+
+.keyword-item-enhanced:hover {
+  background: #e9ecef;
+}
+
+.keyword-item-enhanced input[type="checkbox"] {
+  margin-right: 10px;
+}
+
+.keyword-item-enhanced .keyword-text {
+  flex: 1;
+  font-weight: 500;
+}
+
+.keyword-item-enhanced .keyword-metrics {
+  display: flex;
+  gap: 6px;
+}
+
+/* 生成按鈕區 */
+.generate-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+.generate-actions button {
+  flex: 1;
+  min-width: 150px;
+}
+
+/* SEO 分析進度 */
+.seo-analysis-progress {
+  margin-top: 15px;
+  padding: 15px;
+  background: var(--gov-secondary);
+  border-radius: var(--radius);
+  display: none;
+}
+
+.seo-analysis-progress.active {
+  display: block;
+}
+
+.seo-analysis-progress .progress-text {
+  font-size: 14px;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+/* API 未配置提示 */
+.seo-not-configured {
+  background: #fff3cd;
+  color: #856404;
+  padding: 10px 15px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin-bottom: 15px;
+}
+
+/* 載入動畫 */
+.loading-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

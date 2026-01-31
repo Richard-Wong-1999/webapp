@@ -84,6 +84,13 @@ class DataForSEOClient:
                 logger.error(f"DataForSEO API error: {error_msg}")
                 return {"error": error_msg}
 
+            # 檢查是否返回空結果
+            tasks = result.get("tasks", [])
+            if tasks:
+                task_result = tasks[0].get("result")
+                if not task_result:
+                    logger.warning(f"[DataForSEO] API returned empty result for endpoint: {endpoint}")
+
             return result
 
         except requests.exceptions.Timeout:
@@ -116,12 +123,17 @@ class DataForSEOClient:
                 "error": str (if failed)
             }
         """
-        # 取得相關主題
+        logger.info(f"[Trends] Requesting keyword: {keyword}, geo: {geo}")
+
+        # 地區代碼映射
+        location_code = 2344 if geo == "HK" else None  # Hong Kong
+
+        # 取得相關主題（移除 type 限制以獲取所有數據）
         topics_data = [{
             "keyword": keyword,
-            "location_code": 2344 if geo == "HK" else None,  # Hong Kong
-            "language_code": "zh-TW",
-            "type": "rising"  # rising or top
+            "location_code": location_code,
+            "language_code": "zh-TW"
+            # 不指定 type，以獲取 rising 和 top 數據
         }]
 
         topics_result = self._make_request(
@@ -130,24 +142,33 @@ class DataForSEOClient:
             topics_data
         )
 
+        logger.info(f"[Trends] Raw response status: {topics_result.get('status_code', 'N/A')}")
+
         topics = []
         queries = []
 
-        if not topics_result.get("error"):
+        def parse_trends_result(result: Dict) -> tuple:
+            """解析 Trends API 回應"""
+            parsed_topics = []
+            parsed_queries = []
+
+            if result.get("error"):
+                return parsed_topics, parsed_queries
+
             try:
-                tasks = topics_result.get("tasks", [])
+                tasks = result.get("tasks", [])
                 if tasks and tasks[0].get("result"):
                     for item in tasks[0]["result"]:
                         # 處理相關主題
                         related_topics = item.get("related_topics", {})
                         for topic in related_topics.get("rising", []) or []:
-                            topics.append({
+                            parsed_topics.append({
                                 "topic_title": topic.get("topic_title", ""),
                                 "type": "rising",
                                 "value": topic.get("value", 0)
                             })
                         for topic in related_topics.get("top", []) or []:
-                            topics.append({
+                            parsed_topics.append({
                                 "topic_title": topic.get("topic_title", ""),
                                 "type": "top",
                                 "value": topic.get("value", 0)
@@ -156,19 +177,37 @@ class DataForSEOClient:
                         # 處理相關查詢
                         related_queries = item.get("related_queries", {})
                         for query in related_queries.get("rising", []) or []:
-                            queries.append({
+                            parsed_queries.append({
                                 "query": query.get("query", ""),
                                 "type": "rising",
                                 "value": query.get("value", 0)
                             })
                         for query in related_queries.get("top", []) or []:
-                            queries.append({
+                            parsed_queries.append({
                                 "query": query.get("query", ""),
                                 "type": "top",
                                 "value": query.get("value", 0)
                             })
             except Exception as e:
                 logger.error(f"Error parsing trends data: {e}")
+
+            return parsed_topics, parsed_queries
+
+        # 解析主要語言結果
+        topics, queries = parse_trends_result(topics_result)
+        logger.info(f"[Trends] Parsed topics: {len(topics)}, queries: {len(queries)}")
+
+        # 如果 zh-TW 沒有數據，嘗試使用英文
+        if not topics and not queries and not topics_result.get("error"):
+            logger.info("[Trends] No data for zh-TW, trying 'en'")
+            topics_data[0]["language_code"] = "en"
+            topics_result_en = self._make_request(
+                "POST",
+                "keywords_data/google_trends/explore/live",
+                topics_data
+            )
+            topics, queries = parse_trends_result(topics_result_en)
+            logger.info(f"[Trends] EN fallback - topics: {len(topics)}, queries: {len(queries)}")
 
         return {
             "keyword": keyword,
@@ -269,8 +308,10 @@ class DataForSEOClient:
         metrics = []
 
         if result.get("error"):
-            logger.error(f"Keyword metrics error: {result['error']}")
+            logger.error(f"[Metrics] Keyword metrics error: {result['error']}")
             return metrics
+
+        logger.info(f"[Metrics] Fetching metrics for {len(keywords)} keywords")
 
         try:
             tasks = result.get("tasks", [])
@@ -285,6 +326,10 @@ class DataForSEOClient:
                     })
         except Exception as e:
             logger.error(f"Error parsing keyword metrics: {e}")
+
+        # 如果沒有數據，記錄警告
+        if not metrics:
+            logger.warning(f"[Metrics] No data returned for keywords: {keywords[:3]}...")
 
         return metrics
 

@@ -5,280 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>關鍵字分析結果</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-  <style>
-    /* SEO 研究區塊樣式 */
-    .seo-research-section {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
-      color: white;
-    }
-
-    .seo-research-section h2 {
-      margin: 0 0 15px 0;
-      font-size: 18px;
-    }
-
-    .seo-input-row {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-
-    .seo-input-row input {
-      flex: 1;
-      padding: 10px 15px;
-      border: none;
-      border-radius: 8px;
-      font-size: 14px;
-    }
-
-    .seo-input-row button {
-      padding: 10px 20px;
-      background: rgba(255,255,255,0.2);
-      border: 1px solid rgba(255,255,255,0.3);
-      color: white;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: background 0.2s;
-    }
-
-    .seo-input-row button:hover {
-      background: rgba(255,255,255,0.3);
-    }
-
-    .seo-input-row button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    /* SEO 結果面板 */
-    #seoResearchResults {
-      display: none;
-      background: rgba(255,255,255,0.1);
-      border-radius: 8px;
-      padding: 15px;
-      margin-top: 10px;
-    }
-
-    #seoResearchResults.active {
-      display: block;
-    }
-
-    .seo-panel {
-      margin-bottom: 15px;
-      padding: 12px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 6px;
-    }
-
-    .seo-panel h4 {
-      margin: 0 0 10px 0;
-      font-size: 14px;
-      opacity: 0.9;
-    }
-
-    .seo-metrics {
-      display: flex;
-      gap: 15px;
-      flex-wrap: wrap;
-    }
-
-    .seo-metric {
-      text-align: center;
-      padding: 8px 15px;
-      background: rgba(255,255,255,0.15);
-      border-radius: 6px;
-    }
-
-    .seo-metric-value {
-      font-size: 20px;
-      font-weight: bold;
-    }
-
-    .seo-metric-label {
-      font-size: 11px;
-      opacity: 0.8;
-    }
-
-    .seo-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .seo-tag {
-      padding: 4px 10px;
-      background: rgba(255,255,255,0.2);
-      border-radius: 12px;
-      font-size: 12px;
-    }
-
-    .seo-suggestion-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 10px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 4px;
-      margin-bottom: 4px;
-      font-size: 13px;
-    }
-
-    .seo-suggestion-item:hover {
-      background: rgba(255,255,255,0.2);
-    }
-
-    .seo-suggestion-keyword {
-      flex: 1;
-    }
-
-    .seo-suggestion-metrics {
-      display: flex;
-      gap: 10px;
-      font-size: 11px;
-      opacity: 0.8;
-    }
-
-    /* SEO Badge 樣式 */
-    .seo-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 11px;
-      margin-left: 8px;
-    }
-
-    .seo-badge.volume {
-      background: #e3f2fd;
-      color: #1565c0;
-    }
-
-    .seo-badge.competition {
-      background: #fff3e0;
-      color: #ef6c00;
-    }
-
-    .seo-badge.competition.LOW {
-      background: #e8f5e9;
-      color: #2e7d32;
-    }
-
-    .seo-badge.competition.MEDIUM {
-      background: #fff3e0;
-      color: #ef6c00;
-    }
-
-    .seo-badge.competition.HIGH {
-      background: #ffebee;
-      color: #c62828;
-    }
-
-    /* 關鍵字項目增強 */
-    .keyword-item-enhanced {
-      display: flex;
-      align-items: center;
-      padding: 10px 12px;
-      background: #f8f9fa;
-      border-radius: 6px;
-      margin-bottom: 6px;
-      transition: background 0.2s;
-    }
-
-    .keyword-item-enhanced:hover {
-      background: #e9ecef;
-    }
-
-    .keyword-item-enhanced input[type="checkbox"] {
-      margin-right: 10px;
-    }
-
-    .keyword-item-enhanced .keyword-text {
-      flex: 1;
-      font-weight: 500;
-    }
-
-    .keyword-item-enhanced .keyword-metrics {
-      display: flex;
-      gap: 6px;
-    }
-
-    /* 生成按鈕區 */
-    .generate-actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 15px;
-      flex-wrap: wrap;
-    }
-
-    .generate-actions button {
-      flex: 1;
-      min-width: 150px;
-    }
-
-    .btn-analyze {
-      background: #6c5ce7;
-    }
-
-    .btn-analyze:hover {
-      background: #5b4cdb;
-    }
-
-    .btn-generate-seo {
-      background: #00b894;
-    }
-
-    .btn-generate-seo:hover {
-      background: #00a382;
-    }
-
-    /* SEO 分析進度 */
-    .seo-analysis-progress {
-      margin-top: 15px;
-      padding: 15px;
-      background: #f0f4ff;
-      border-radius: 8px;
-      display: none;
-    }
-
-    .seo-analysis-progress.active {
-      display: block;
-    }
-
-    .seo-analysis-progress .progress-text {
-      font-size: 14px;
-      color: #333;
-      margin-bottom: 10px;
-    }
-
-    /* API 未配置提示 */
-    .seo-not-configured {
-      background: #fff3cd;
-      color: #856404;
-      padding: 10px 15px;
-      border-radius: 6px;
-      font-size: 13px;
-      margin-bottom: 15px;
-    }
-
-    /* 載入動畫 */
-    .loading-spinner {
-      display: inline-block;
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-radius: 50%;
-      border-top-color: white;
-      animation: spin 0.8s linear infinite;
-      margin-right: 8px;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-  </style>
 </head>
 
 <body class="keywords-body">
@@ -372,9 +98,9 @@
 
       <h2>🔥 近30天關鍵字分析</h2>
 
-      <form action="/generate_articles_seo" method="post" id="generateForm">
+      <form action="/generate_articles" method="post" id="generateForm">
         <input type="hidden" name="source" id="sourceInput" value="{{ source or 'swd' }}">
-        <input type="hidden" name="use_seo" id="useSeoInput" value="0">
+        <input type="hidden" name="keyword_source" id="keywordSourceInput" value="{{ source or 'swd' }}">
 
         <div id="keywordArea">
           {% if keywords %}
@@ -402,11 +128,8 @@
 
         <!-- 生成按鈕區 -->
         <div class="generate-actions">
-          <button type="submit" class="btn-generate-seo" id="btnGenerateSeo" onclick="setUseSeo(true)">
-            🚀 生成 SEO 增強文章
-          </button>
-          <button type="submit" id="btnGenerateNormal" onclick="setUseSeo(false)">
-            📝 一般生成
+          <button type="submit" id="btnGenerate">
+            📝 生成文章
           </button>
         </div>
       </form>
@@ -473,16 +196,20 @@
 
         const notConfiguredEl = document.getElementById('seoNotConfigured');
         const researchBtn = document.getElementById('seoResearchBtn');
-        const btnGenerateSeo = document.getElementById('btnGenerateSeo');
 
         if (!seoApiConfigured) {
           if (notConfiguredEl) notConfiguredEl.style.display = 'block';
           if (researchBtn) researchBtn.disabled = true;
-          if (btnGenerateSeo) btnGenerateSeo.disabled = true;
         }
       } catch (e) {
         console.warn('Failed to check SEO API status:', e);
       }
+    }
+
+    // 更新關鍵字來源
+    function setKeywordSource(source) {
+      const input = document.getElementById('keywordSourceInput');
+      if (input) input.value = source;
     }
 
     // ============================================================
@@ -594,8 +321,8 @@
       ` : '';
 
       const itemHtml = `
-        <div class="keyword-item-enhanced" style="background: #e8f5e9;">
-          <input type="checkbox" name="selected_keywords" value="${escapeHtml(keyword)}" checked>
+        <div class="keyword-item-enhanced" style="background: #e8f5e9;" data-source="seo">
+          <input type="checkbox" name="selected_keywords" value="${escapeHtml(keyword)}" checked data-source="seo">
           <span class="keyword-text">${escapeHtml(keyword)}</span>
           <span class="keyword-metrics">${metricsHtml}</span>
         </div>
@@ -603,12 +330,11 @@
 
       document.getElementById('keywordList').insertAdjacentHTML('afterbegin', itemHtml);
 
+      // 標記為 SEO 來源（因為從 SEO 研究加入的）
+      setKeywordSource('seo');
+
       // 更新選擇狀態
       syncSelectionFromDOM(activeSource);
-    }
-
-    function setUseSeo(useSeo) {
-      document.getElementById('useSeoInput').value = useSeo ? '1' : '0';
     }
 
     // ============================================================
@@ -784,6 +510,7 @@
       setSourceLabel(source);
       setSourceNote(source);
       setSourceInput(source);
+      setKeywordSource(source);  // 更新 keyword_source
       updateTabButtons();
 
       if (keywordMemory[source]) {
