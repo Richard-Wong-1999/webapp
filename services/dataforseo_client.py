@@ -72,12 +72,18 @@ class DataForSEOClient:
 
         try:
             if method.upper() == "POST":
+                logger.info(f"[DataForSEO] POST {endpoint} with data: {json.dumps(data, ensure_ascii=False)[:300]}")
                 response = requests.post(url, headers=headers, json=data, timeout=60)
             else:
+                logger.info(f"[DataForSEO] GET {endpoint}")
                 response = requests.get(url, headers=headers, timeout=60)
 
             response.raise_for_status()
             result = response.json()
+
+            # 記錄完整回應（用於診斷）
+            logger.info(f"[DataForSEO] Response status_code: {result.get('status_code')}")
+            logger.info(f"[DataForSEO] Response: {json.dumps(result, ensure_ascii=False)[:500]}")
 
             if result.get("status_code") != 20000:
                 error_msg = result.get("status_message", "Unknown error")
@@ -90,6 +96,8 @@ class DataForSEOClient:
                 task_result = tasks[0].get("result")
                 if not task_result:
                     logger.warning(f"[DataForSEO] API returned empty result for endpoint: {endpoint}")
+                else:
+                    logger.info(f"[DataForSEO] Task result count: {len(task_result) if isinstance(task_result, list) else 'N/A'}")
 
             return result
 

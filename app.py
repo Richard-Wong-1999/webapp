@@ -714,21 +714,32 @@ def test_trends():
         if not dataforseo_client.is_configured():
             return jsonify({"success": False, "message": "DataForSEO API 未配置"})
 
+        # 調用 API 並獲取原始回應
         trends = dataforseo_client.get_google_trends(keyword)
+
+        # 記錄完整回應供診斷
+        logger.info(f"[DEBUG] Trends API full response: {json.dumps(trends, ensure_ascii=False)[:500]}")
 
         if trends.get("error"):
             return jsonify({
                 "success": False,
-                "message": f"API 錯誤: {trends['error']}"
+                "message": f"API 錯誤: {trends['error']}",
+                "raw_response": str(trends)[:200]
             })
+
+        topics = trends.get("topics", [])
+        queries = trends.get("queries", [])
 
         return jsonify({
             "success": True,
-            "topics_count": len(trends.get("topics", [])),
-            "queries_count": len(trends.get("queries", [])),
-            "message": "測試成功"
+            "topics_count": len(topics),
+            "queries_count": len(queries),
+            "message": "測試成功",
+            "sample_topics": topics[:3] if topics else [],
+            "sample_queries": queries[:3] if queries else []
         })
     except Exception as e:
+        logger.error(f"[DEBUG] Trends test error: {str(e)}")
         return jsonify({
             "success": False,
             "message": f"錯誤: {str(e)}"
@@ -799,6 +810,64 @@ def test_serp():
             "message": "測試成功"
         })
     except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"錯誤: {str(e)}"
+        })
+
+
+@app.route("/api/debug/raw_api_test", methods=["POST"])
+def raw_api_test():
+    """原始 API 測試 - 返回完整回應"""
+    try:
+        data = request.get_json()
+        keyword = data.get("keyword", "長者").strip()
+        api_type = data.get("api_type", "trends")  # trends, metrics, serp
+
+        if not dataforseo_client.is_configured():
+            return jsonify({"success": False, "message": "DataForSEO API 未配置"})
+
+        # 直接調用底層 API 並返回完整回應
+        if api_type == "trends":
+            endpoint = "keywords_data/google_trends/explore/live"
+            request_data = [{
+                "keyword": keyword,
+                "location_code": 2344,
+                "language_code": "zh-TW"
+            }]
+        elif api_type == "metrics":
+            endpoint = "keywords_data/google_ads/search_volume/live"
+            request_data = [{
+                "keywords": [keyword],
+                "location_code": 2344,
+                "language_code": "zh-TW"
+            }]
+        elif api_type == "serp":
+            endpoint = "serp/google/organic/live/regular"
+            request_data = [{
+                "keyword": keyword,
+                "location_code": 2344,
+                "language_code": "zh-TW",
+                "device": "desktop",
+                "os": "windows",
+                "depth": 5
+            }]
+        else:
+            return jsonify({"success": False, "message": "無效的 API 類型"})
+
+        # 調用 API
+        result = dataforseo_client._make_request("POST", endpoint, request_data)
+
+        # 返回完整的原始回應
+        return jsonify({
+            "success": True,
+            "endpoint": endpoint,
+            "request_data": request_data,
+            "raw_response": result
+        })
+
+    except Exception as e:
+        logger.error(f"[DEBUG] Raw API test error: {str(e)}")
         return jsonify({
             "success": False,
             "message": f"錯誤: {str(e)}"

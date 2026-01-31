@@ -136,6 +136,18 @@
       <button class="test-btn" onclick="testSerp()">🧪 測試 SERP API</button>
 
       <div id="apiTestResult"></div>
+
+      <hr style="margin: 20px 0; opacity: 0.3;">
+
+      <h3>🔬 查看原始 API 回應</h3>
+      <p style="font-size: 13px; color: #666;">
+        如果測試失敗，點擊下方按鈕查看 DataForSEO 的完整原始回應，幫助診斷問題。
+      </p>
+      <button class="test-btn" onclick="showRawApiResponse('trends')">📄 Trends 原始回應</button>
+      <button class="test-btn" onclick="showRawApiResponse('metrics')">📄 Metrics 原始回應</button>
+      <button class="test-btn" onclick="showRawApiResponse('serp')">📄 SERP 原始回應</button>
+
+      <div id="rawApiResult" style="margin-top: 15px;"></div>
     </div>
 
     <div style="margin-top: 30px;">
@@ -277,6 +289,63 @@
         resultDiv.className = 'test-result error';
         resultDiv.innerHTML = `❌ ${e.message}`;
       }
+    }
+
+    async function showRawApiResponse(apiType) {
+      const keyword = document.getElementById('testKeyword').value.trim();
+      if (!keyword) {
+        alert('請輸入測試關鍵字');
+        return;
+      }
+
+      const resultDiv = document.getElementById('rawApiResult');
+      resultDiv.innerHTML = '⏳ 正在獲取原始 API 回應...';
+      resultDiv.className = 'test-result';
+      resultDiv.style.display = 'block';
+
+      try {
+        const res = await fetch('/api/debug/raw_api_test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword, api_type: apiType })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          const rawResponse = JSON.stringify(data.raw_response, null, 2);
+          resultDiv.className = 'test-result success';
+          resultDiv.innerHTML = `
+            <strong>✅ 原始 API 回應</strong><br>
+            <strong>Endpoint:</strong> ${data.endpoint}<br>
+            <strong>關鍵字:</strong> ${keyword}<br>
+            <button onclick="copyToClipboard('rawResponse')" style="margin: 10px 0; padding: 5px 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+              📋 複製到剪貼簿
+            </button>
+            <pre id="rawResponse" style="background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; max-height: 400px; font-size: 11px; text-align: left;">${escapeHtml(rawResponse)}</pre>
+          `;
+        } else {
+          resultDiv.className = 'test-result error';
+          resultDiv.innerHTML = `❌ ${data.message}`;
+        }
+      } catch (e) {
+        resultDiv.className = 'test-result error';
+        resultDiv.innerHTML = `❌ ${e.message}`;
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function copyToClipboard(elementId) {
+      const text = document.getElementById(elementId).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        alert('已複製到剪貼簿！');
+      }).catch(err => {
+        alert('複製失敗: ' + err);
+      });
     }
   </script>
 </body>
