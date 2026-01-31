@@ -830,20 +830,21 @@ def raw_api_test():
         # 直接調用底層 API 並返回完整回應
         if api_type == "trends":
             endpoint = "keywords_data/google_trends/explore/live"
+            # Google Trends API 不接受 language_code
             request_data = [{
                 "keyword": keyword,
-                "location_code": 2344,
-                "language_code": "zh-TW"
+                "location_code": 2344
             }]
         elif api_type == "metrics":
             endpoint = "keywords_data/google_ads/search_volume/live"
+            # Google Ads API 不接受 language_code
             request_data = [{
                 "keywords": [keyword],
-                "location_code": 2344,
-                "language_code": "zh-TW"
+                "location_code": 2344
             }]
         elif api_type == "serp":
             endpoint = "serp/google/organic/live/regular"
+            # SERP API 可以接受 language_code
             request_data = [{
                 "keyword": keyword,
                 "location_code": 2344,
