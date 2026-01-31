@@ -32,6 +32,14 @@ from services import (
     article_generation_progress,
     generated_prompts
 )
+from services.seo_orchestrator import (
+    analyze_keyword_full,
+    prepare_seo_context_for_prompt,
+    get_seo_analysis_progress,
+    seo_analysis_progress
+)
+from services.dataforseo_client import dataforseo_client
+from services.article_generator import generate_single_article_with_seo
 
 # 工具
 from utils import logger, cache_manager
@@ -426,6 +434,315 @@ def test_db():
         if conn:
             return_db_connection(conn)
         return f"❌ 測試失敗：{e}", 500
+
+
+# ==========================================================
+# 路由：SEO 關鍵字研究
+# ==========================================================
+@app.route("/api/seo/keyword_research", methods=["POST"])
+def seo_keyword_research():
+    """SEO 關鍵字研究（Trends + Ads 數據）"""
+    try:
+        data = request.get_json()
+        keyword = data.get("keyword", "").strip()
+
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"}), 400
+
+        if not dataforseo_client.is_configured():
+            return jsonify({
+                "success": False,
+                "message": "DataForSEO API 未配置，請設定環境變數"
+            }), 500
+
+        # 取得 Trends 數據
+        trends = dataforseo_client.get_google_trends(keyword)
+
+        # 取得關鍵字指標
+        metrics = dataforseo_client.get_keyword_metrics([keyword])
+        keyword_metrics = metrics[0] if metrics else {}
+
+        # 取得相關關鍵字建議
+        suggestions = dataforseo_client.get_keyword_suggestions(keyword, limit=30)
+
+        return jsonify({
+            "success": True,
+            "keyword": keyword,
+            "trends": {
+                "topics": trends.get("topics", []),
+                "queries": trends.get("queries", [])
+            },
+            "metrics": {
+                "search_volume": keyword_metrics.get("search_volume", 0),
+                "cpc": keyword_metrics.get("cpc", 0),
+                "competition": keyword_metrics.get("competition", 0),
+                "competition_level": keyword_metrics.get("competition_level", "")
+            },
+            "suggestions": suggestions
+        })
+
+    except Exception as e:
+        logger.error(f"SEO keyword research error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route("/api/seo/keyword_suggestions", methods=["GET"])
+def seo_keyword_suggestions():
+    """取得關鍵字建議"""
+    try:
+        keyword = request.args.get("keyword", "").strip()
+        limit = int(request.args.get("limit", "30"))
+
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"}), 400
+
+        if not dataforseo_client.is_configured():
+            return jsonify({
+                "success": False,
+                "message": "DataForSEO API 未配置"
+            }), 500
+
+        suggestions = dataforseo_client.get_keyword_suggestions(keyword, limit=limit)
+
+        return jsonify({
+            "success": True,
+            "keyword": keyword,
+            "suggestions": suggestions
+        })
+
+    except Exception as e:
+        logger.error(f"SEO keyword suggestions error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route("/api/seo/analyze_serp", methods=["POST"])
+def seo_analyze_serp():
+    """分析 SERP 並爬取競爭對手網站"""
+    try:
+        data = request.get_json()
+        keyword = data.get("keyword", "").strip()
+        skip_scraping = data.get("skip_scraping", False)
+
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"}), 400
+
+        if seo_analysis_progress.get("running"):
+            return jsonify({
+                "success": False,
+                "message": "另一個分析正在進行中"
+            }), 400
+
+        # 啟動背景分析
+        def run_analysis():
+            analyze_keyword_full(keyword, skip_scraping=skip_scraping)
+
+        threading.Thread(target=run_analysis, daemon=True).start()
+
+        return jsonify({
+            "success": True,
+            "message": "分析已啟動",
+            "keyword": keyword
+        })
+
+    except Exception as e:
+        logger.error(f"SEO analyze SERP error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route("/api/seo/analysis_progress", methods=["GET"])
+def seo_analysis_progress_route():
+    """取得 SEO 分析進度"""
+    return jsonify(get_seo_analysis_progress())
+
+
+@app.route("/api/seo/analysis_result", methods=["GET"])
+def seo_analysis_result():
+    """取得 SEO 分析結果"""
+    try:
+        keyword = request.args.get("keyword", "").strip()
+
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"}), 400
+
+        # 直接執行完整分析（同步）
+        result = analyze_keyword_full(keyword, skip_scraping=False)
+
+        return jsonify({
+            "success": True,
+            "data": result
+        })
+
+    except Exception as e:
+        logger.error(f"SEO analysis result error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+# ==========================================================
+# 路由：SEO 增強文章生成
+# ==========================================================
+@app.route("/generate_articles_seo", methods=["POST"])
+def generate_articles_seo():
+    """使用 SEO 數據增強的文章生成"""
+    selected_keywords = request.form.getlist("selected_keywords")
+    source = normalize_source(request.form.get("source", "swd"))
+    use_seo = request.form.get("use_seo", "0") == "1"
+
+    if not selected_keywords or len(selected_keywords) < 1:
+        return render_template(
+            "error.html",
+            title="未選擇關鍵詞",
+            message="請至少選擇 1 個關鍵詞才能生成文章。",
+            back_url="/keywords",
+            back_text="返回關鍵字頁"
+        ), 400
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    if use_seo and dataforseo_client.is_configured():
+        # 使用 SEO 增強生成
+        threading.Thread(
+            target=background_generate_articles_seo,
+            args=(selected_keywords, timestamp, source)
+        ).start()
+    else:
+        # 使用原本的生成方式
+        threading.Thread(
+            target=background_generate_articles,
+            args=(selected_keywords, timestamp, source)
+        ).start()
+
+    return render_template("generate.html")
+
+
+def background_generate_articles_seo(
+    selected_keywords: list,
+    timestamp: str,
+    source: str = "swd"
+):
+    """背景生成 SEO 增強文章"""
+    from services.article_generator import (
+        article_generation_progress,
+        generated_prompts,
+        generated_prompts_lock
+    )
+    from services.keyword_extractor import get_recent_articles_text, get_relevant_reference_blocks
+    from utils.text_processing import build_reference_content_blocks_flexible
+    from services.database import insert_article
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import re
+
+    total_articles = len(selected_keywords)
+
+    # 初始化進度
+    article_generation_progress.update(
+        total=total_articles,
+        completed=0,
+        running=True,
+        timestamp=timestamp,
+        titles=[]
+    )
+
+    with generated_prompts_lock:
+        generated_prompts[timestamp] = []
+
+    logger.info(f"開始生成 {total_articles} 篇 SEO 增強文章（source={source}）")
+
+    # 準備備用內容
+    recent_blocks = get_recent_articles_text(source=source, days=30)
+    if not recent_blocks:
+        fallback_content = "（無可用參考資料，請基於關鍵詞生成符合香港社會福利/醫療政策背景的專業內容）"
+    else:
+        fallback_content = build_reference_content_blocks_flexible(
+            recent_blocks,
+            max_chars_zh=Config.MAX_CHARS_ZH,
+            max_chars_en=Config.MAX_CHARS_EN,
+            prefer_bilingual=True
+        )
+
+    results = []
+
+    # 使用線程池生成文章
+    with ThreadPoolExecutor(max_workers=Config.ARTICLE_GENERATION_WORKERS) as executor:
+        futures = [
+            executor.submit(
+                generate_single_article_with_seo,
+                i,
+                selected_keywords[i],
+                source,
+                timestamp,
+                total_articles,
+                fallback_content
+            )
+            for i in range(total_articles)
+        ]
+
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception as e:
+                logger.error(f"文章生成失敗：{e}")
+
+    # 解析並儲存文章
+    all_articles = []
+    for idx, output_text, chosen_kws in sorted(results, key=lambda x: x[0]):
+        try:
+            match = re.search(r'\[.*\]', output_text, re.S)
+            parsed = json.loads(match.group(0)) if match else json.loads(output_text)
+
+            if not isinstance(parsed, list):
+                parsed = [parsed]
+
+            for item in parsed:
+                if item.get("keywords") != chosen_kws:
+                    item["keywords"] = chosen_kws
+
+                zh = item.get("zh") or {}
+                en = item.get("en") or {}
+
+                record = {
+                    "title_zh": (zh.get("title") or "").strip(),
+                    "body_zh": (zh.get("body") or "").strip(),
+                    "meta_title_zh": (zh.get("meta_title") or "").strip(),
+                    "meta_description_zh": (zh.get("meta_description") or "").strip(),
+                    "title_en": (en.get("title") or "").strip(),
+                    "body_en": (en.get("body") or "").strip(),
+                    "meta_title_en": (en.get("meta_title") or "").strip(),
+                    "meta_description_en": (en.get("meta_description") or "").strip(),
+                    "keywords": json.dumps(item.get("keywords", chosen_kws), ensure_ascii=False),
+                    "timestamp": timestamp
+                }
+
+                record["title"] = record["title_zh"] or "未命名"
+                record["body"] = record["body_zh"] or ""
+                record["meta_title"] = record["meta_title_zh"] or ""
+                record["meta_description"] = record["meta_description_zh"] or ""
+
+                all_articles.append(record)
+
+        except Exception as e:
+            logger.error(f"解析錯誤：{e}")
+            continue
+
+    # 批次插入資料庫
+    for art in all_articles:
+        result = insert_article(art)
+        if result.get("success"):
+            title = art.get("title_zh") or art.get("title") or "未命名"
+            article_generation_progress.titles.append(title)
+
+    logger.info(f"成功儲存 {len(all_articles)} 篇 SEO 增強文章到資料庫")
+
+    # 完成
+    article_generation_progress.update(running=False)
+
+
+@app.route("/api/seo/status", methods=["GET"])
+def seo_api_status():
+    """檢查 SEO API 配置狀態"""
+    return jsonify({
+        "configured": dataforseo_client.is_configured(),
+        "message": "DataForSEO API 已配置" if dataforseo_client.is_configured() else "DataForSEO API 未配置"
+    })
 
 
 # ==========================================================

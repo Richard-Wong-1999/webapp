@@ -5,13 +5,333 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>關鍵字分析結果</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <style>
+    /* SEO 研究區塊樣式 */
+    .seo-research-section {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      color: white;
+    }
+
+    .seo-research-section h2 {
+      margin: 0 0 15px 0;
+      font-size: 18px;
+    }
+
+    .seo-input-row {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+
+    .seo-input-row input {
+      flex: 1;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .seo-input-row button {
+      padding: 10px 20px;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      color: white;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+
+    .seo-input-row button:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .seo-input-row button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* SEO 結果面板 */
+    #seoResearchResults {
+      display: none;
+      background: rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 10px;
+    }
+
+    #seoResearchResults.active {
+      display: block;
+    }
+
+    .seo-panel {
+      margin-bottom: 15px;
+      padding: 12px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 6px;
+    }
+
+    .seo-panel h4 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .seo-metrics {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+
+    .seo-metric {
+      text-align: center;
+      padding: 8px 15px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 6px;
+    }
+
+    .seo-metric-value {
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .seo-metric-label {
+      font-size: 11px;
+      opacity: 0.8;
+    }
+
+    .seo-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .seo-tag {
+      padding: 4px 10px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 12px;
+      font-size: 12px;
+    }
+
+    .seo-suggestion-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 4px;
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    .seo-suggestion-item:hover {
+      background: rgba(255,255,255,0.2);
+    }
+
+    .seo-suggestion-keyword {
+      flex: 1;
+    }
+
+    .seo-suggestion-metrics {
+      display: flex;
+      gap: 10px;
+      font-size: 11px;
+      opacity: 0.8;
+    }
+
+    /* SEO Badge 樣式 */
+    .seo-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      margin-left: 8px;
+    }
+
+    .seo-badge.volume {
+      background: #e3f2fd;
+      color: #1565c0;
+    }
+
+    .seo-badge.competition {
+      background: #fff3e0;
+      color: #ef6c00;
+    }
+
+    .seo-badge.competition.LOW {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .seo-badge.competition.MEDIUM {
+      background: #fff3e0;
+      color: #ef6c00;
+    }
+
+    .seo-badge.competition.HIGH {
+      background: #ffebee;
+      color: #c62828;
+    }
+
+    /* 關鍵字項目增強 */
+    .keyword-item-enhanced {
+      display: flex;
+      align-items: center;
+      padding: 10px 12px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      margin-bottom: 6px;
+      transition: background 0.2s;
+    }
+
+    .keyword-item-enhanced:hover {
+      background: #e9ecef;
+    }
+
+    .keyword-item-enhanced input[type="checkbox"] {
+      margin-right: 10px;
+    }
+
+    .keyword-item-enhanced .keyword-text {
+      flex: 1;
+      font-weight: 500;
+    }
+
+    .keyword-item-enhanced .keyword-metrics {
+      display: flex;
+      gap: 6px;
+    }
+
+    /* 生成按鈕區 */
+    .generate-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+
+    .generate-actions button {
+      flex: 1;
+      min-width: 150px;
+    }
+
+    .btn-analyze {
+      background: #6c5ce7;
+    }
+
+    .btn-analyze:hover {
+      background: #5b4cdb;
+    }
+
+    .btn-generate-seo {
+      background: #00b894;
+    }
+
+    .btn-generate-seo:hover {
+      background: #00a382;
+    }
+
+    /* SEO 分析進度 */
+    .seo-analysis-progress {
+      margin-top: 15px;
+      padding: 15px;
+      background: #f0f4ff;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .seo-analysis-progress.active {
+      display: block;
+    }
+
+    .seo-analysis-progress .progress-text {
+      font-size: 14px;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    /* API 未配置提示 */
+    .seo-not-configured {
+      background: #fff3cd;
+      color: #856404;
+      padding: 10px 15px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 15px;
+    }
+
+    /* 載入動畫 */
+    .loading-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 
 <body class="keywords-body">
   <div class="container">
     <!-- 左區：關鍵字分析 -->
     <div class="left-panel">
-      <!-- ✅ SWD 爬虫功能区块 -->
+
+      <!-- SEO 關鍵字研究區塊 -->
+      <div class="seo-research-section" id="seoResearchSection">
+        <h2>🔍 SEO 關鍵字研究</h2>
+        <div id="seoNotConfigured" class="seo-not-configured" style="display:none;">
+          DataForSEO API 未配置。請在 .env 檔案中設定 DATAFORSEO_LOGIN 和 DATAFORSEO_PASSWORD。
+        </div>
+        <div class="seo-input-row">
+          <input type="text" id="seoKeywordInput" placeholder="輸入種子關鍵字進行 SEO 分析...">
+          <button id="seoResearchBtn" onclick="researchKeyword()">分析關鍵字</button>
+        </div>
+
+        <div id="seoResearchResults">
+          <!-- 指標面板 -->
+          <div class="seo-panel" id="metricsPanel">
+            <h4>📊 關鍵字指標</h4>
+            <div class="seo-metrics">
+              <div class="seo-metric">
+                <div class="seo-metric-value" id="metricVolume">-</div>
+                <div class="seo-metric-label">月搜尋量</div>
+              </div>
+              <div class="seo-metric">
+                <div class="seo-metric-value" id="metricCPC">-</div>
+                <div class="seo-metric-label">CPC</div>
+              </div>
+              <div class="seo-metric">
+                <div class="seo-metric-value" id="metricCompetition">-</div>
+                <div class="seo-metric-label">競爭程度</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Trends 面板 -->
+          <div class="seo-panel" id="trendsPanel">
+            <h4>📈 Google Trends 相關查詢</h4>
+            <div class="seo-tags" id="trendsQueries"></div>
+          </div>
+
+          <!-- 建議關鍵字面板 -->
+          <div class="seo-panel" id="suggestionsPanel">
+            <h4>💡 相關關鍵字建議 <small>(點擊可加入生成清單)</small></h4>
+            <div id="suggestionsList"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SWD 爬虫功能区块 -->
       <div class="crawl-section">
         <h3 style="margin: 0 0 10px 0; font-size: 16px;">🔄 更新 SWD 新聞資料</h3>
         <button class="crawl-btn" id="crawlBtn" onclick="startCrawl()">
@@ -23,7 +343,7 @@
         </div>
       </div>
 
-      <!-- ✅ HA 爬虫功能区块 -->
+      <!-- HA 爬虫功能区块 -->
       <div class="crawl-section" style="margin-top: 14px;">
         <h3 style="margin: 0 0 10px 0; font-size: 16px;">🔄 更新 HA 新聞資料</h3>
         <button class="crawl-btn" id="crawlHaBtn" onclick="startHaCrawl()">
@@ -52,16 +372,18 @@
 
       <h2>🔥 近30天關鍵字分析</h2>
 
-      <form action="/generate_articles" method="post" id="generateForm">
+      <form action="/generate_articles_seo" method="post" id="generateForm">
         <input type="hidden" name="source" id="sourceInput" value="{{ source or 'swd' }}">
+        <input type="hidden" name="use_seo" id="useSeoInput" value="0">
 
         <div id="keywordArea">
           {% if keywords %}
           <div class="keyword-list" id="keywordList">
             {% for kw in keywords %}
-            <div class="keyword-item">
+            <div class="keyword-item-enhanced">
               <input type="checkbox" name="selected_keywords" value="{{ kw }}">
-              <label>{{ kw }}</label>
+              <span class="keyword-text">{{ kw }}</span>
+              <span class="keyword-metrics" data-keyword="{{ kw }}"></span>
             </div>
             {% endfor %}
           </div>
@@ -70,7 +392,23 @@
           {% endif %}
         </div>
 
-        <button type="submit">生成文章</button>
+        <!-- SEO 分析進度 -->
+        <div class="seo-analysis-progress" id="seoAnalysisProgress">
+          <div class="progress-text" id="seoProgressText">正在分析...</div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" id="seoProgressBar" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- 生成按鈕區 -->
+        <div class="generate-actions">
+          <button type="submit" class="btn-generate-seo" id="btnGenerateSeo" onclick="setUseSeo(true)">
+            🚀 生成 SEO 增強文章
+          </button>
+          <button type="submit" id="btnGenerateNormal" onclick="setUseSeo(false)">
+            📝 一般生成
+          </button>
+        </div>
       </form>
 
       <p class="note" id="sourceNote">
@@ -123,10 +461,161 @@
 
   <script>
     // ============================================================
-    // ✅ 指數退避輪詢工具函數
+    // SEO API 狀態
+    // ============================================================
+    let seoApiConfigured = false;
+
+    async function checkSeoApiStatus() {
+      try {
+        const res = await fetch('/api/seo/status');
+        const data = await res.json();
+        seoApiConfigured = data.configured;
+
+        const notConfiguredEl = document.getElementById('seoNotConfigured');
+        const researchBtn = document.getElementById('seoResearchBtn');
+        const btnGenerateSeo = document.getElementById('btnGenerateSeo');
+
+        if (!seoApiConfigured) {
+          if (notConfiguredEl) notConfiguredEl.style.display = 'block';
+          if (researchBtn) researchBtn.disabled = true;
+          if (btnGenerateSeo) btnGenerateSeo.disabled = true;
+        }
+      } catch (e) {
+        console.warn('Failed to check SEO API status:', e);
+      }
+    }
+
+    // ============================================================
+    // SEO 關鍵字研究
+    // ============================================================
+    let seoResearching = false;
+
+    async function researchKeyword() {
+      if (seoResearching || !seoApiConfigured) return;
+
+      const input = document.getElementById('seoKeywordInput');
+      const keyword = (input.value || '').trim();
+      if (!keyword) {
+        alert('請輸入關鍵字');
+        return;
+      }
+
+      const btn = document.getElementById('seoResearchBtn');
+      const resultsEl = document.getElementById('seoResearchResults');
+
+      seoResearching = true;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loading-spinner"></span>分析中...';
+
+      try {
+        const res = await fetch('/api/seo/keyword_research', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+          alert(data.message || '分析失敗');
+          return;
+        }
+
+        // 顯示結果
+        resultsEl.classList.add('active');
+
+        // 更新指標
+        document.getElementById('metricVolume').textContent =
+          (data.metrics.search_volume || 0).toLocaleString();
+        document.getElementById('metricCPC').textContent =
+          '$' + (data.metrics.cpc || 0).toFixed(2);
+        document.getElementById('metricCompetition').textContent =
+          data.metrics.competition_level || 'N/A';
+
+        // 更新 Trends 查詢
+        const queriesEl = document.getElementById('trendsQueries');
+        const queries = (data.trends.queries || []).slice(0, 10);
+        queriesEl.innerHTML = queries.map(q =>
+          `<span class="seo-tag">${escapeHtml(q.query)}</span>`
+        ).join('');
+
+        // 更新建議關鍵字
+        const suggestionsEl = document.getElementById('suggestionsList');
+        const suggestions = (data.suggestions || []).slice(0, 15);
+        suggestionsEl.innerHTML = suggestions.map(s => `
+          <div class="seo-suggestion-item" onclick="addSuggestionToList('${escapeHtml(s.keyword)}')">
+            <span class="seo-suggestion-keyword">${escapeHtml(s.keyword)}</span>
+            <span class="seo-suggestion-metrics">
+              <span>搜尋量: ${(s.search_volume || 0).toLocaleString()}</span>
+              <span>CPC: $${(s.cpc || 0).toFixed(2)}</span>
+            </span>
+          </div>
+        `).join('');
+
+        // 儲存建議關鍵字的指標，供列表顯示用
+        window.seoSuggestionMetrics = {};
+        suggestions.forEach(s => {
+          window.seoSuggestionMetrics[s.keyword] = s;
+        });
+
+      } catch (e) {
+        console.error('Research error:', e);
+        alert('研究失敗: ' + e.message);
+      } finally {
+        seoResearching = false;
+        btn.disabled = false;
+        btn.textContent = '分析關鍵字';
+      }
+    }
+
+    function addSuggestionToList(keyword) {
+      // 檢查是否已存在
+      const keywordArea = document.getElementById('keywordArea');
+      const existing = keywordArea.querySelector(`input[value="${keyword}"]`);
+      if (existing) {
+        existing.checked = true;
+        existing.closest('.keyword-item-enhanced').style.background = '#e3f2fd';
+        setTimeout(() => {
+          existing.closest('.keyword-item-enhanced').style.background = '';
+        }, 1000);
+        return;
+      }
+
+      // 新增到列表
+      const listEl = document.getElementById('keywordList');
+      if (!listEl) {
+        keywordArea.innerHTML = '<div class="keyword-list" id="keywordList"></div>';
+      }
+
+      const metrics = window.seoSuggestionMetrics && window.seoSuggestionMetrics[keyword];
+      const metricsHtml = metrics ? `
+        <span class="seo-badge volume">${(metrics.search_volume || 0).toLocaleString()}</span>
+        <span class="seo-badge competition ${metrics.competition_level || ''}">${metrics.competition_level || ''}</span>
+      ` : '';
+
+      const itemHtml = `
+        <div class="keyword-item-enhanced" style="background: #e8f5e9;">
+          <input type="checkbox" name="selected_keywords" value="${escapeHtml(keyword)}" checked>
+          <span class="keyword-text">${escapeHtml(keyword)}</span>
+          <span class="keyword-metrics">${metricsHtml}</span>
+        </div>
+      `;
+
+      document.getElementById('keywordList').insertAdjacentHTML('afterbegin', itemHtml);
+
+      // 更新選擇狀態
+      syncSelectionFromDOM(activeSource);
+    }
+
+    function setUseSeo(useSeo) {
+      document.getElementById('useSeoInput').value = useSeo ? '1' : '0';
+    }
+
+    // ============================================================
+    // 指數退避輪詢工具函數
     // ============================================================
     async function pollWithBackoff(fetchFn, callback, maxInterval = 5000) {
-      let interval = 1000;  // 初始1秒
+      let interval = 1000;
 
       while (true) {
         try {
@@ -134,8 +623,6 @@
           if (!shouldContinue) break;
 
           await new Promise(resolve => setTimeout(resolve, interval));
-
-          // 逐漸增加間隔到最大值
           interval = Math.min(interval * 1.2, maxInterval);
         } catch (error) {
           console.error('Polling error:', error);
@@ -145,16 +632,15 @@
     }
 
     // ============================================================
-    // 全域狀態：source tabs + keyword selection per source（方案 B）
+    // 全域狀態
     // ============================================================
     let activeSource = ("{{ source or 'swd' }}").toLowerCase() === "ha" ? "ha" : "swd";
-    const keywordMemory = { swd: null, ha: null }; // keywords list cache (frontend)
+    const keywordMemory = { swd: null, ha: null };
     const selectedBySource = {
       swd: new Set(),
       ha: new Set()
     };
 
-    // 監控狀態（兩個輪詢互不干擾）
     let crawlMonitoring = false;
     let crawlHaMonitoring = false;
 
@@ -201,7 +687,6 @@
       const haBtn = document.getElementById("tabHaBtn");
       if (!swdBtn || !haBtn) return;
 
-      // 不改 CSS 檔的前提下，做最簡單的視覺提示
       swdBtn.disabled = (activeSource === "swd");
       haBtn.disabled = (activeSource === "ha");
     }
@@ -248,19 +733,18 @@
         const escaped = escapeHtml(safe);
 
         return `
-          <div class="keyword-item">
+          <div class="keyword-item-enhanced">
             <input type="checkbox" name="selected_keywords" value="${escaped}">
-            <label>${escaped}</label>
+            <span class="keyword-text">${escaped}</span>
+            <span class="keyword-metrics" data-keyword="${escaped}"></span>
           </div>
         `;
       }).join("");
 
       area.innerHTML = `<div class="keyword-list" id="keywordList">${itemsHtml}</div>`;
 
-      // render 完後，把此來源的已選取狀態套回去
       applySelectionToDOM(source);
 
-      // 監聽本清單的變更，更新對應來源的 selection set
       const listEl = document.getElementById("keywordList");
       if (listEl) {
         listEl.addEventListener("change", () => {
@@ -283,7 +767,6 @@
         const kws = await fetchKeywords(source, { force });
         keywordMemory[source] = kws;
 
-        // 若目前在看這個 source，才刷新下方清單
         if (activeSource === source) {
           renderKeywords(source, kws);
         }
@@ -295,7 +778,6 @@
     async function switchSource(source) {
       source = normalizeSource(source);
 
-      // 切換前，先把目前頁面勾選狀態記起來（方案 B）
       syncSelectionFromDOM(activeSource);
 
       activeSource = source;
@@ -304,7 +786,6 @@
       setSourceInput(source);
       updateTabButtons();
 
-      // 用前端快取（沒有再抓）
       if (keywordMemory[source]) {
         renderKeywords(source, keywordMemory[source]);
         return;
@@ -337,17 +818,17 @@
         const result = await response.json();
 
         if (!result.success) {
-          status.innerText = result.message || '⚠️ 無法啟動 SWD 爬蟲';
+          status.innerText = result.message || '無法啟動 SWD 爬蟲';
           btn.disabled = false;
           btn.innerText = '📥 爬取 SWD 最新新聞稿';
           return;
         }
 
         crawlMonitoring = true;
-        monitorCrawlProgress(); // 不 await，讓 UI 保持順暢
+        monitorCrawlProgress();
 
       } catch (error) {
-        status.innerText = '❌ 發生錯誤：' + error.message;
+        status.innerText = '發生錯誤：' + error.message;
         btn.disabled = false;
         btn.innerText = '📥 爬取 SWD 最新新聞稿';
         crawlMonitoring = false;
@@ -371,21 +852,20 @@
           progressBar.style.width = percent + '%';
         }
 
-        // running=false 表示結束（completed / error / idle）
         if (!data.running) {
           btn.disabled = false;
           btn.innerText = '📥 爬取 SWD 最新新聞稿';
           crawlMonitoring = false;
 
           if (data.status === 'completed') {
-            status.innerText = (data.message || '✅ 已更新') + '（SWD 關鍵字將自動更新）';
+            status.innerText = (data.message || '已更新') + '（SWD 關鍵字將自動更新）';
             await refreshKeywordsForSource("swd", { force: true });
           }
 
-          return false;  // 停止輪詢
+          return false;
         }
 
-        return true;  // 繼續輪詢
+        return true;
       });
     }
 
@@ -411,17 +891,17 @@
         const result = await response.json();
 
         if (!result.success) {
-          status.innerText = result.message || '⚠️ 無法啟動 HA 爬蟲';
+          status.innerText = result.message || '無法啟動 HA 爬蟲';
           btn.disabled = false;
           btn.innerText = '📥 爬取 HA 新聞稿';
           return;
         }
 
         crawlHaMonitoring = true;
-        monitorHaCrawlProgress(); // 不 await
+        monitorHaCrawlProgress();
 
       } catch (error) {
-        status.innerText = '❌ 發生錯誤：' + error.message;
+        status.innerText = '發生錯誤：' + error.message;
         btn.disabled = false;
         btn.innerText = '📥 爬取 HA 新聞稿';
         crawlHaMonitoring = false;
@@ -451,35 +931,36 @@
           crawlHaMonitoring = false;
 
           if (data.status === 'completed') {
-            status.innerText = (data.message || '✅ 已更新') + '（HA 關鍵字將自動更新）';
+            status.innerText = (data.message || '已更新') + '（HA 關鍵字將自動更新）';
             await refreshKeywordsForSource("ha", { force: true });
           }
 
-          return false;  // 停止輪詢
+          return false;
         }
 
-        return true;  // 繼續輪詢
+        return true;
       });
     }
 
     // ============================================================
-    // 頁面載入：初始化 tabs、並同時接上兩個進度輪詢（若正在跑）
+    // 頁面載入
     // ============================================================
     window.addEventListener("load", async () => {
-      // 初始化 label / note / hidden input / tab 狀態
+      // 檢查 SEO API 狀態
+      await checkSeoApiStatus();
+
+      // 初始化 UI
       setSourceLabel(activeSource);
       setSourceNote(activeSource);
       setSourceInput(activeSource);
       updateTabButtons();
 
-      // 把 SSR 當下的 keyword list 記到前端快取
-      // 以及把已勾選狀態（若使用者剛進來就有勾）記起來
-      // 這樣切換來源再切回來不會丟。
+      // 記錄初始關鍵字
       try {
         const initialKeywords = [];
         const area = document.getElementById("keywordArea");
         if (area) {
-          const labels = area.querySelectorAll(".keyword-item label");
+          const labels = area.querySelectorAll(".keyword-text");
           labels.forEach(l => initialKeywords.push(l.textContent || ""));
         }
         if (initialKeywords.length > 0) {
@@ -490,13 +971,12 @@
         console.warn("init keywordMemory failed:", e);
       }
 
-      // ✅ 同時檢查兩個爬蟲是否在跑，若在跑就自動開始監控（不影響按鈕）
+      // 檢查爬蟲狀態
       try {
         const swd = await (await fetch('/crawl_progress')).json();
         if (swd && swd.running) {
           crawlMonitoring = true;
 
-          // 讓按鈕呈現「執行中」
           const btn = document.getElementById('crawlBtn');
           const status = document.getElementById('crawlStatus');
           const progressContainer = document.getElementById('crawlProgressContainer');
@@ -527,6 +1007,14 @@
       } catch (e) {
         console.warn("auto monitor HA failed:", e);
       }
+
+      // Enter 鍵觸發 SEO 研究
+      document.getElementById('seoKeywordInput').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          researchKeyword();
+        }
+      });
     });
   </script>
 </body>

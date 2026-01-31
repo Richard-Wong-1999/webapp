@@ -88,7 +88,7 @@ def with_db_connection(func):
 
 
 def ensure_database_initialized():
-    """確保資料庫已初始化"""
+    """確保資料庫已初始化（包含所有必要的資料表）"""
     conn = get_db_connection()
     if not conn:
         logger.error("⚠️ 無法連接資料庫進行初始化檢查")
@@ -96,18 +96,31 @@ def ensure_database_initialized():
 
     try:
         cur = conn.cursor()
+
+        # 檢查所有必要的資料表
+        required_tables = [
+            'articles',
+            'seo_keyword_data',
+            'seo_trends_data',
+            'seo_serp_cache',
+            'seo_scraped_content'
+        ]
+
         cur.execute("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables
-                WHERE table_name = 'articles'
-            )
-        """)
-        exists = cur.fetchone()[0]
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = ANY(%s)
+        """, (required_tables,))
+
+        existing_tables = {row[0] for row in cur.fetchall()}
+        missing_tables = set(required_tables) - existing_tables
+
         cur.close()
         return_db_connection(conn)
 
-        if not exists:
-            logger.warning("⚠️ 資料表不存在，正在創建...")
+        if missing_tables:
+            logger.warning(f"⚠️ 缺少資料表：{missing_tables}，正在創建...")
             return init_database()
 
         return True
@@ -164,10 +177,83 @@ def init_database():
             ON articles USING gin(to_tsvector('english', keywords))
         """)
 
+        # ========== SEO 相關資料表 ==========
+
+        # SEO 關鍵字指標快取
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS seo_keyword_data (
+                id SERIAL PRIMARY KEY,
+                keyword VARCHAR(500) NOT NULL,
+                search_volume INTEGER,
+                cpc DECIMAL(10, 4),
+                competition DECIMAL(5, 4),
+                competition_level VARCHAR(20),
+                related_keywords JSONB,
+                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(keyword)
+            )
+        """)
+
+        # Google Trends 快取
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS seo_trends_data (
+                id SERIAL PRIMARY KEY,
+                keyword VARCHAR(500) NOT NULL,
+                topics JSONB,
+                queries JSONB,
+                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(keyword)
+            )
+        """)
+
+        # SERP 結果快取
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS seo_serp_cache (
+                id SERIAL PRIMARY KEY,
+                keyword VARCHAR(500) NOT NULL,
+                organic_results JSONB,
+                people_also_ask JSONB,
+                related_searches JSONB,
+                fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(keyword)
+            )
+        """)
+
+        # 爬取的網站內容
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS seo_scraped_content (
+                id SERIAL PRIMARY KEY,
+                url VARCHAR(2000) NOT NULL UNIQUE,
+                title VARCHAR(500),
+                meta_description TEXT,
+                main_content TEXT,
+                word_count INTEGER,
+                scraped_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # SEO 資料表索引
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_keyword_data_fetched
+            ON seo_keyword_data(fetched_at DESC)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_trends_fetched
+            ON seo_trends_data(fetched_at DESC)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_serp_fetched
+            ON seo_serp_cache(fetched_at DESC)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_scraped_scraped_at
+            ON seo_scraped_content(scraped_at DESC)
+        """)
+
         conn.commit()
         cur.close()
         return_db_connection(conn)
-        logger.info("✅ 資料表初始化/升級完成（含索引）")
+        logger.info("✅ 資料表初始化/升級完成（含索引及 SEO 資料表）")
         return True
 
     except Exception as e:

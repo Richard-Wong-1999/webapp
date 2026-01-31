@@ -16,6 +16,8 @@ from services.keyword_extractor import (
 )
 from services.database import insert_article
 from models import ProgressTracker
+from services.seo_orchestrator import analyze_keyword_full, prepare_seo_context_for_prompt
+from services.dataforseo_client import dataforseo_client
 
 # 全域進度追蹤器
 article_generation_progress = ProgressTracker("article_generation")
@@ -135,6 +137,178 @@ def generate_single_article(
             "keyword": main_keyword,
             "prompt": {"zh": prompt_zh},
             "source": source
+        })
+
+    # 呼叫 API
+    output = call_deepseek(prompt_zh)
+
+    # 更新進度
+    article_generation_progress.increment()
+
+    return (article_index, output, chosen_keywords)
+
+
+def build_seo_prompt_section(seo_context: str) -> str:
+    """構建 SEO prompt 區塊
+
+    Args:
+        seo_context: prepare_seo_context_for_prompt 返回的內容
+
+    Returns:
+        格式化的 prompt 區塊
+    """
+    if not seo_context:
+        return ""
+
+    return f"""
+---
+## 📊 SEO 分析數據（請參考以下資料優化文章）
+
+{seo_context}
+
+---
+"""
+
+
+def generate_single_article_with_seo(
+    article_index: int,
+    main_keyword: str,
+    source: str,
+    timestamp: str,
+    total_articles: int,
+    fallback_content: str
+) -> tuple:
+    """生成單篇 SEO 增強文章
+
+    Args:
+        article_index: 文章索引
+        main_keyword: 主要關鍵詞
+        source: 資料來源
+        timestamp: 時間戳記
+        total_articles: 總文章數
+        fallback_content: 備用參考內容
+
+    Returns:
+        (索引, 輸出文本, 關鍵詞列表)
+    """
+    chosen_keywords = [main_keyword]
+
+    logger.info(
+        f"📝 正在生成第 {article_index + 1}/{total_articles} 篇 SEO 增強文章，"
+        f"主題：{main_keyword}（source={source}）"
+    )
+
+    # 取得 SEO 數據
+    seo_context_str = ""
+    if dataforseo_client.is_configured():
+        try:
+            logger.info(f"正在取得「{main_keyword}」的 SEO 數據...")
+            seo_result = analyze_keyword_full(main_keyword, skip_scraping=False)
+            seo_context_str = prepare_seo_context_for_prompt(main_keyword, seo_result)
+            if seo_context_str:
+                logger.info(f"✅ 成功取得「{main_keyword}」的 SEO 數據")
+        except Exception as e:
+            logger.warning(f"⚠️ 取得 SEO 數據失敗：{e}")
+
+    # 取得相關參考資料
+    reference_blocks = get_relevant_reference_blocks(
+        source=source,
+        keywords=[main_keyword],
+        days=30,
+        limit=10
+    )
+
+    if reference_blocks:
+        reference_content = build_reference_content_blocks_flexible(
+            reference_blocks,
+            max_chars_zh=Config.MAX_CHARS_ZH,
+            max_chars_en=Config.MAX_CHARS_EN,
+            prefer_bilingual=True
+        )
+        if reference_content:
+            logger.info(f"✅ 為關鍵詞「{main_keyword}」找到相關新聞（{source}）")
+        else:
+            reference_content = fallback_content
+            logger.warning(f"⚠️ 「{main_keyword}」相關新聞無法組出可用參考，改用 fallback")
+    else:
+        reference_content = fallback_content
+        logger.warning(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（{source}）")
+
+    # 構建 SEO prompt 區塊
+    seo_prompt_section = build_seo_prompt_section(seo_context_str)
+
+    # 生成 prompt（含 SEO 數據）
+    prompt_zh = (
+        "你是一位香港地區的專業內容寫作顧問與 SEO 專家。\n\n"
+        "## 📋 任務說明\n"
+        f"請根據以下**真實新聞參考資料**和 **SEO 分析數據**，以「{main_keyword}」為**唯一主題**，一次輸出：\n"
+        "1) 一篇繁體中文 blog 文章（300-400字）\n"
+        "2) 一篇英文文章（約 180-250 words）\n\n"
+        "⚠️ 重要準則（必須遵守）：\n"
+        "1. 文章必須和「老人」或「長者」有關\n"
+        "2. 必須基於下方提供的參考資料內容，不可憑空捏造事實\n"
+        "3. 可以重組、摘要、改寫，但核心事實必須來自參考資料\n"
+        f"4. 文章標題和內容必須圍繞「{main_keyword}」展開\n"
+        "5. 保持客觀、專業的新聞報導風格\n"
+        "6. 如果參考資料不足，請基於關鍵詞生成符合香港社會福利/醫療政策背景的專業內容（但仍不要編造具體數據與細節）\n"
+    )
+
+    # 加入 SEO 區塊
+    if seo_prompt_section:
+        prompt_zh += (
+            "7. 請參考 SEO 分析數據優化文章：\n"
+            "   - 適當融入相關關鍵字和長尾詞\n"
+            "   - 回答「用戶常問問題」中的問題\n"
+            "   - 參考競爭對手內容的結構和深度\n\n"
+        )
+        prompt_zh += seo_prompt_section
+
+    prompt_zh += (
+        "\n---\n"
+        "## 📰 參考新聞資料（中英並列）\n"
+        f"{reference_content}\n\n"
+        "---\n\n"
+        "## 🎯 文章主題（唯一關鍵詞）\n"
+        f"**{main_keyword}**\n\n"
+        "---\n"
+        "## 📤 輸出格式（只輸出 JSON，不要任何說明文字）\n"
+        "請輸出 JSON 陣列，陣列只包含 1 個物件，格式如下：\n\n"
+        "```json\n"
+        "[\n"
+        "  {\n"
+        '    "zh": {\n'
+        f'      "title": "中文標題（必須包含「{main_keyword}」）",\n'
+        '      "body": "中文正文（繁體中文 300-400 字）",\n'
+        f'      "meta_title": "中文SEO標題（60字內，必須包含「{main_keyword}」）",\n'
+        '      "meta_description": "中文SEO摘要（150字內）"\n'
+        "    },\n"
+        '    "en": {\n'
+        f'      "title": "English title (must include \\"{main_keyword}\\")",\n'
+        '      "body": "English body (about 180-250 words)",\n'
+        f'      "meta_title": "English SEO title (<=60 chars, must include \\"{main_keyword}\\")",\n'
+        '      "meta_description": "English SEO description (<=150 chars)"\n'
+        "    },\n"
+        f'    "keywords": {json.dumps(chosen_keywords, ensure_ascii=False)}\n'
+        "  }\n"
+        "]\n"
+        "```\n\n"
+        "🔴 **重要提醒：**\n"
+        f"- `keywords` 欄位必須完全使用：{json.dumps(chosen_keywords, ensure_ascii=False)}\n"
+        "- 不可添加、修改或替換關鍵詞\n"
+        "- 請確保 JSON 格式正確，可直接解析\n"
+        "- 直接輸出 JSON 陣列，不要包含其他說明文字\n"
+    )
+
+    # 儲存 prompt（用於除錯）
+    with generated_prompts_lock:
+        if timestamp not in generated_prompts:
+            generated_prompts[timestamp] = []
+        generated_prompts[timestamp].append({
+            "index": article_index + 1,
+            "keyword": main_keyword,
+            "prompt": {"zh": prompt_zh},
+            "source": source,
+            "has_seo_data": bool(seo_context_str)
         })
 
     # 呼叫 API

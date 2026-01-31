@@ -51,6 +51,23 @@ class Config:
     # InfoGov settings
     INFOGOV_HOST = "www.info.gov.hk"
 
+    # DataForSEO API
+    DATAFORSEO_LOGIN = os.getenv("DATAFORSEO_LOGIN")
+    DATAFORSEO_PASSWORD = os.getenv("DATAFORSEO_PASSWORD")
+    DATAFORSEO_RATE_LIMIT = 0.5  # 請求/秒
+
+    # SEO 快取 TTL（秒）
+    SEO_TRENDS_CACHE_TTL = 3600      # 1 小時
+    SEO_KEYWORD_CACHE_TTL = 86400    # 24 小時
+    SEO_SERP_CACHE_TTL = 21600       # 6 小時
+
+    # 爬蟲設定
+    SCRAPE_TIMEOUT = 10
+    SCRAPE_MAX_CONCURRENT = 3
+
+    # 香港位置代碼（DataForSEO）
+    HK_LOCATION_CODE = 2344
+
     @classmethod
     def validate(cls):
         """驗證必要的配置是否存在"""
