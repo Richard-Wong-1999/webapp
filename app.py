@@ -816,13 +816,42 @@ def test_serp():
         })
 
 
+@app.route("/api/debug/test_suggestions", methods=["POST"])
+def test_suggestions():
+    """測試關鍵字建議 API"""
+    try:
+        data = request.get_json()
+        keyword = data.get("keyword", "").strip()
+
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"})
+
+        if not dataforseo_client.is_configured():
+            return jsonify({"success": False, "message": "DataForSEO API 未配置"})
+
+        suggestions = dataforseo_client.get_keyword_suggestions(keyword, limit=10)
+
+        return jsonify({
+            "success": True,
+            "suggestions_count": len(suggestions),
+            "message": "測試成功",
+            "sample_suggestions": suggestions[:5]  # 顯示前 5 個建議
+        })
+    except Exception as e:
+        logger.error(f"[DEBUG] Suggestions test error: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"錯誤: {str(e)}"
+        })
+
+
 @app.route("/api/debug/raw_api_test", methods=["POST"])
 def raw_api_test():
     """原始 API 測試 - 返回完整回應"""
     try:
         data = request.get_json()
         keyword = data.get("keyword", "長者").strip()
-        api_type = data.get("api_type", "trends")  # trends, metrics, serp
+        api_type = data.get("api_type", "trends")  # trends, metrics, serp, suggestions
 
         if not dataforseo_client.is_configured():
             return jsonify({"success": False, "message": "DataForSEO API 未配置"})
@@ -841,6 +870,15 @@ def raw_api_test():
             request_data = [{
                 "keywords": [keyword],
                 "location_code": 2344
+            }]
+        elif api_type == "suggestions":
+            endpoint = "keywords_data/google_ads/keywords_for_keywords/live"
+            # Google Ads 關鍵字建議 API 不接受 language_code
+            request_data = [{
+                "keyword": keyword,
+                "location_code": 2344,
+                "include_seed_keyword": True,
+                "limit": 20
             }]
         elif api_type == "serp":
             endpoint = "serp/google/organic/live/regular"

@@ -133,6 +133,7 @@
 
       <button class="test-btn" onclick="testTrends()">🧪 測試 Google Trends API</button>
       <button class="test-btn" onclick="testKeywordMetrics()">🧪 測試關鍵字指標</button>
+      <button class="test-btn" onclick="testSuggestions()">🧪 測試關鍵字建議</button>
       <button class="test-btn" onclick="testSerp()">🧪 測試 SERP API</button>
 
       <div id="apiTestResult"></div>
@@ -145,6 +146,7 @@
       </p>
       <button class="test-btn" onclick="showRawApiResponse('trends')">📄 Trends 原始回應</button>
       <button class="test-btn" onclick="showRawApiResponse('metrics')">📄 Metrics 原始回應</button>
+      <button class="test-btn" onclick="showRawApiResponse('suggestions')">📄 Suggestions 原始回應</button>
       <button class="test-btn" onclick="showRawApiResponse('serp')">📄 SERP 原始回應</button>
 
       <div id="rawApiResult" style="margin-top: 15px;"></div>
@@ -245,6 +247,49 @@
           resultDiv.innerHTML = `
             ✅ 關鍵字指標測試成功<br>
             <small>搜尋量: ${data.search_volume || 0}, CPC: $${data.cpc || 0}, 競爭: ${data.competition_level || 'N/A'}</small>
+          `;
+        } else {
+          resultDiv.className = 'test-result error';
+          resultDiv.innerHTML = `❌ ${data.message}`;
+        }
+      } catch (e) {
+        resultDiv.className = 'test-result error';
+        resultDiv.innerHTML = `❌ ${e.message}`;
+      }
+    }
+
+    async function testSuggestions() {
+      const keyword = document.getElementById('testKeyword').value.trim();
+      if (!keyword) {
+        alert('請輸入測試關鍵字');
+        return;
+      }
+
+      const resultDiv = document.getElementById('apiTestResult');
+      resultDiv.innerHTML = '⏳ 測試關鍵字建議 API...';
+      resultDiv.className = 'test-result';
+
+      try {
+        const res = await fetch('/api/debug/test_suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          resultDiv.className = 'test-result success';
+          let samplesHtml = '';
+          if (data.sample_suggestions && data.sample_suggestions.length > 0) {
+            samplesHtml = '<br><strong>範例建議：</strong><br>';
+            data.sample_suggestions.forEach(s => {
+              samplesHtml += `<small>• ${s.keyword} (搜尋量: ${s.search_volume || 0}, CPC: $${s.cpc || 0})</small><br>`;
+            });
+          }
+          resultDiv.innerHTML = `
+            ✅ 關鍵字建議測試成功<br>
+            <small>相關關鍵字數量: ${data.suggestions_count || 0}</small>
+            ${samplesHtml}
           `;
         } else {
           resultDiv.className = 'test-result error';
