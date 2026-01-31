@@ -33,10 +33,33 @@ def get_google_trends_data(keyword: str, geo="HK", hl="zh-TW"):
     chrome_opts.add_argument("--window-size=1366,768")  # 減少視窗大小
     chrome_opts.add_argument("--lang=zh-TW")
 
+    # ✅ Render 支援：使用系統的 Chromium
+    import os
+    import platform
+
+    # 檢查是否在 Linux 環境（Render）
+    if platform.system() == "Linux":
+        if os.path.exists("/usr/bin/chromium"):
+            chrome_opts.binary_location = "/usr/bin/chromium"
+            print("🔧 使用系統 Chromium: /usr/bin/chromium")
+
     driver = None
 
     try:
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_opts)
+        # 嘗試使用系統 chromedriver（Render）
+        if platform.system() == "Linux" and os.path.exists("/usr/bin/chromedriver"):
+            print("🔧 使用系統 ChromeDriver: /usr/bin/chromedriver")
+            driver = webdriver.Chrome(
+                service=Service("/usr/bin/chromedriver"),
+                options=chrome_opts
+            )
+        else:
+            # 本地開發環境：使用 webdriver-manager
+            print("🔧 使用 WebDriver Manager")
+            driver = webdriver.Chrome(
+                service=Service(ChromeDriverManager().install()),
+                options=chrome_opts
+            )
         url = f"https://trends.google.com/trends/explore?hl={hl}&geo={geo}&q={keyword}"
         driver.get(url)
 

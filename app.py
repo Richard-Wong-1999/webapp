@@ -597,6 +597,223 @@ def seo_api_status():
 
 
 # ==========================================================
+# 路由：SEO 診斷工具
+# ==========================================================
+@app.route("/debug/seo")
+def debug_seo():
+    """SEO 診斷頁面"""
+    # 檢查 DataForSEO 配置
+    dataforseo_configured = dataforseo_client.is_configured()
+    dataforseo_login = Config.DATAFORSEO_LOGIN or ""
+
+    # 檢查 Selenium
+    selenium_available = False
+    chrome_status = "未檢測"
+    try:
+        import selenium
+        selenium_available = True
+
+        # 嘗試檢查 Chrome
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["chromium", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            chrome_status = result.stdout.strip() if result.returncode == 0 else "Chromium not found"
+        except FileNotFoundError:
+            try:
+                result = subprocess.run(
+                    ["google-chrome", "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                chrome_status = result.stdout.strip() if result.returncode == 0 else "Chrome not found"
+            except FileNotFoundError:
+                chrome_status = "Chrome/Chromium not found"
+        except Exception as e:
+            chrome_status = f"檢測錯誤: {str(e)}"
+    except ImportError:
+        pass
+
+    return render_template(
+        "debug_seo.html",
+        dataforseo_configured=dataforseo_configured,
+        dataforseo_login=dataforseo_login,
+        selenium_available=selenium_available,
+        chrome_status=chrome_status
+    )
+
+
+@app.route("/api/debug/test_dataforseo", methods=["GET"])
+def test_dataforseo():
+    """測試 DataForSEO API 連接"""
+    if not dataforseo_client.is_configured():
+        return jsonify({
+            "success": False,
+            "message": "DataForSEO API 未配置"
+        })
+
+    try:
+        # 測試簡單的 API 調用
+        result = dataforseo_client._make_request("GET", "appendix/user_data")
+
+        if result.get("status_code") == 20000:
+            return jsonify({
+                "success": True,
+                "status_code": result.get("status_code"),
+                "message": "API 連接成功"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "status_code": result.get("status_code"),
+                "message": result.get("status_message", "API 返回錯誤")
+            })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"連接錯誤: {str(e)}"
+        })
+
+
+@app.route("/api/debug/test_selenium", methods=["GET"])
+def test_selenium():
+    """測試 Selenium"""
+    try:
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+
+        chrome_opts = Options()
+        chrome_opts.add_argument("--headless=new")
+        chrome_opts.add_argument("--no-sandbox")
+        chrome_opts.add_argument("--disable-dev-shm-usage")
+
+        # 嘗試啟動瀏覽器
+        driver = webdriver.Chrome(options=chrome_opts)
+        driver.get("https://www.google.com")
+        title = driver.title
+        driver.quit()
+
+        return jsonify({
+            "success": True,
+            "message": f"Selenium 正常運作（測試頁標題: {title}）"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"Selenium 錯誤: {str(e)}"
+        })
+
+
+@app.route("/api/debug/test_trends", methods=["POST"])
+def test_trends():
+    """測試 Google Trends API"""
+    try:
+        data = request.get_json()
+        keyword = data.get("keyword", "").strip()
+
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"})
+
+        if not dataforseo_client.is_configured():
+            return jsonify({"success": False, "message": "DataForSEO API 未配置"})
+
+        trends = dataforseo_client.get_google_trends(keyword)
+
+        if trends.get("error"):
+            return jsonify({
+                "success": False,
+                "message": f"API 錯誤: {trends['error']}"
+            })
+
+        return jsonify({
+            "success": True,
+            "topics_count": len(trends.get("topics", [])),
+            "queries_count": len(trends.get("queries", [])),
+            "message": "測試成功"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"錯誤: {str(e)}"
+        })
+
+
+@app.route("/api/debug/test_metrics", methods=["POST"])
+def test_metrics():
+    """測試關鍵字指標 API"""
+    try:
+        data = request.get_json()
+        keyword = data.get("keyword", "").strip()
+
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"})
+
+        if not dataforseo_client.is_configured():
+            return jsonify({"success": False, "message": "DataForSEO API 未配置"})
+
+        metrics = dataforseo_client.get_keyword_metrics([keyword])
+
+        if not metrics:
+            return jsonify({
+                "success": False,
+                "message": "API 未返回數據"
+            })
+
+        metric = metrics[0]
+        return jsonify({
+            "success": True,
+            "search_volume": metric.get("search_volume", 0),
+            "cpc": metric.get("cpc", 0),
+            "competition_level": metric.get("competition_level", ""),
+            "message": "測試成功"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"錯誤: {str(e)}"
+        })
+
+
+@app.route("/api/debug/test_serp", methods=["POST"])
+def test_serp():
+    """測試 SERP API"""
+    try:
+        data = request.get_json()
+        keyword = data.get("keyword", "").strip()
+
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"})
+
+        if not dataforseo_client.is_configured():
+            return jsonify({"success": False, "message": "DataForSEO API 未配置"})
+
+        serp = dataforseo_client.get_serp_results(keyword, num=5)
+
+        if serp.get("error"):
+            return jsonify({
+                "success": False,
+                "message": f"API 錯誤: {serp['error']}"
+            })
+
+        return jsonify({
+            "success": True,
+            "organic_count": len(serp.get("organic_results", [])),
+            "paa_count": len(serp.get("people_also_ask", [])),
+            "message": "測試成功"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"錯誤: {str(e)}"
+        })
+
+
+# ==========================================================
 # 應用啟動
 # ==========================================================
 if __name__ == "__main__":
