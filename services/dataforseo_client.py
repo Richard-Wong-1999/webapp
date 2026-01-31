@@ -7,6 +7,7 @@
 """
 
 import time
+import json
 import base64
 import requests
 from typing import List, Dict, Optional, Any
@@ -72,7 +73,11 @@ class DataForSEOClient:
 
         try:
             if method.upper() == "POST":
-                logger.info(f"[DataForSEO] POST {endpoint} with data: {json.dumps(data, ensure_ascii=False)[:300]}")
+                try:
+                    data_str = json.dumps(data, ensure_ascii=False)[:300] if data else "None"
+                    logger.info(f"[DataForSEO] POST {endpoint} with data: {data_str}")
+                except Exception as e:
+                    logger.info(f"[DataForSEO] POST {endpoint} (data serialization error: {e})")
                 response = requests.post(url, headers=headers, json=data, timeout=60)
             else:
                 logger.info(f"[DataForSEO] GET {endpoint}")
@@ -83,7 +88,11 @@ class DataForSEOClient:
 
             # 記錄完整回應（用於診斷）
             logger.info(f"[DataForSEO] Response status_code: {result.get('status_code')}")
-            logger.info(f"[DataForSEO] Response: {json.dumps(result, ensure_ascii=False)[:500]}")
+            try:
+                result_str = json.dumps(result, ensure_ascii=False)[:500]
+                logger.info(f"[DataForSEO] Response: {result_str}")
+            except Exception as e:
+                logger.info(f"[DataForSEO] Response (serialization error: {e})")
 
             if result.get("status_code") != 20000:
                 error_msg = result.get("status_message", "Unknown error")
