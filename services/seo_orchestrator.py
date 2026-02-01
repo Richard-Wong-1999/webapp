@@ -386,24 +386,39 @@ def analyze_keyword_full(keyword: str, skip_scraping: bool = False) -> Dict[str,
     }
 
     try:
-        # Step 1: Google Trends
-        update_progress("trends", "正在取得 Google Trends 數據...", 0)
+        # Step 1: Google Trends (topics) + DataForSEO Labs (related keywords)
+        update_progress("trends", "正在取得關鍵字趨勢與相關查詢...", 0)
 
         trends = get_cached_trends(keyword)
         if not trends:
-            logger.info(f"Fetching trends for: {keyword}")
+            logger.info(f"Fetching trends and related keywords for: {keyword}")
+
+            # 使用 DataForSEO Labs API 取得相關關鍵字（替代 Google Trends 相關查詢）
+            # Labs API 更可靠，可以返回相關關鍵字數據
+            labs_keywords = dataforseo_client.get_related_keywords_labs(keyword, limit=20)
+
+            # 將 Labs 結果格式化為 queries 格式（相容現有代碼）
+            queries = []
+            for i, kw in enumerate(labs_keywords[:20]):
+                queries.append({
+                    "query": kw.get("keyword", ""),
+                    "type": "related",  # 標記為相關關鍵字
+                    "value": kw.get("search_volume", 0)  # 使用搜尋量作為 value
+                })
+
+            # Google Trends API 僅用於取得 topics（如有）
+            # 注意：實際上 Trends API 通常不返回 topics/queries，但保留以防萬一
             trends_result = dataforseo_client.get_google_trends(keyword)
-            if not trends_result.get("error"):
-                trends = {
-                    "topics": trends_result.get("topics", []),
-                    "queries": trends_result.get("queries", [])
-                }
-                store_trends_cache(keyword, trends)
-            else:
-                trends = {"topics": [], "queries": [], "error": trends_result.get("error")}
+            topics = trends_result.get("topics", []) if not trends_result.get("error") else []
+
+            trends = {
+                "topics": topics,
+                "queries": queries  # 使用 Labs API 的相關關鍵字
+            }
+            store_trends_cache(keyword, trends)
 
         result["trends"] = trends
-        update_progress("trends", "Google Trends 完成", 1)
+        update_progress("trends", "關鍵字趨勢與相關查詢完成", 1)
 
         # Step 2: Keyword Data (Search Volume, CPC, Competition)
         update_progress("keyword_data", "正在取得關鍵字指標...", 1)

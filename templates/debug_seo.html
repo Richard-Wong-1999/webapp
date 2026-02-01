@@ -105,8 +105,8 @@
 
       <div class="debug-code" style="margin-top: 15px; background: #fff;">
         <strong>📊 數據返回說明：</strong><br><br>
-        • <strong>Trends Topics/Queries: 0</strong> → 該關鍵字在香港地區 Google Trends 數據不足（正常現象）<br>
-        • <strong>關鍵字建議只有 1 個</strong> → 中文關鍵字在 Google Ads 相關建議較少（已啟用降級機制）<br>
+        • <strong>相關關鍵字 (Labs API)</strong> → 使用 DataForSEO Labs API 取得相關關鍵字，費用 $0.05/次<br>
+        • <strong>關鍵字建議</strong> → 中文關鍵字在 Google Ads 相關建議較少（已啟用降級機制）<br>
         • <strong>SERP 有機結果 > 0</strong> → 正常，表示 API 可以獲取搜尋結果<br>
       </div>
     </div>
@@ -169,7 +169,7 @@
         <button class="test-btn" style="background: #6c757d; margin: 5px;" onclick="setKeyword('醫療服務')">醫療服務</button>
       </div>
 
-      <button class="test-btn" onclick="testTrends()">🧪 測試 Google Trends API</button>
+      <button class="test-btn" onclick="testTrends()">🧪 測試相關關鍵字 API (Labs)</button>
       <button class="test-btn" onclick="testKeywordMetrics()">🧪 測試關鍵字指標</button>
       <button class="test-btn" onclick="testSuggestions()">🧪 測試關鍵字建議</button>
       <button class="test-btn" onclick="testSerp()">🧪 測試 SERP API</button>
@@ -182,7 +182,8 @@
       <p style="font-size: 13px; color: #666;">
         如果測試失敗，點擊下方按鈕查看 DataForSEO 的完整原始回應，幫助診斷問題。
       </p>
-      <button class="test-btn" onclick="showRawApiResponse('trends')">📄 Trends 原始回應</button>
+      <button class="test-btn" onclick="showRawApiResponse('labs')">📄 Labs 原始回應</button>
+      <button class="test-btn" onclick="showRawApiResponse('trends')">📄 Trends 原始回應 (舊版)</button>
       <button class="test-btn" onclick="showRawApiResponse('metrics')">📄 Metrics 原始回應</button>
       <button class="test-btn" onclick="showRawApiResponse('suggestions')">📄 Suggestions 原始回應</button>
       <button class="test-btn" onclick="showRawApiResponse('serp')">📄 SERP 原始回應</button>
@@ -234,7 +235,7 @@
       }
 
       const resultDiv = document.getElementById('apiTestResult');
-      resultDiv.innerHTML = '⏳ 測試 Trends API...';
+      resultDiv.innerHTML = '⏳ 測試相關關鍵字 API (DataForSEO Labs)...';
       resultDiv.className = 'test-result';
 
       try {
@@ -247,9 +248,17 @@
 
         if (data.success) {
           resultDiv.className = 'test-result success';
+          let samplesHtml = '';
+          if (data.sample_queries && data.sample_queries.length > 0) {
+            samplesHtml = '<br><strong>範例：</strong><br>';
+            data.sample_queries.forEach(q => {
+              samplesHtml += `<small>• ${q.query} (搜尋量: ${q.value || 0})</small><br>`;
+            });
+          }
           resultDiv.innerHTML = `
-            ✅ Trends API 測試成功<br>
-            <small>Topics: ${data.topics_count || 0}, Queries: ${data.queries_count || 0}</small>
+            ✅ 相關關鍵字 API 測試成功 (DataForSEO Labs)<br>
+            <small>相關關鍵字數量: ${data.queries_count || 0}</small>
+            ${samplesHtml}
           `;
         } else {
           resultDiv.className = 'test-result error';

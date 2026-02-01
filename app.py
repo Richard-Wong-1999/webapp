@@ -703,7 +703,7 @@ def test_selenium():
 
 @app.route("/api/debug/test_trends", methods=["POST"])
 def test_trends():
-    """測試 Google Trends API"""
+    """測試相關關鍵字 API (DataForSEO Labs)"""
     try:
         data = request.get_json()
         keyword = data.get("keyword", "").strip()
@@ -714,32 +714,38 @@ def test_trends():
         if not dataforseo_client.is_configured():
             return jsonify({"success": False, "message": "DataForSEO API 未配置"})
 
-        # 調用 API 並獲取原始回應
-        trends = dataforseo_client.get_google_trends(keyword)
+        # 使用 DataForSEO Labs API 取得相關關鍵字
+        labs_keywords = dataforseo_client.get_related_keywords_labs(keyword, limit=20)
 
         # 記錄完整回應供診斷
-        logger.info(f"[DEBUG] Trends API full response: {json.dumps(trends, ensure_ascii=False)[:500]}")
+        logger.info(f"[DEBUG] Labs API response count: {len(labs_keywords)}")
 
-        if trends.get("error"):
+        if not labs_keywords:
             return jsonify({
                 "success": False,
-                "message": f"API 錯誤: {trends['error']}",
-                "raw_response": str(trends)[:200]
+                "message": "API 未返回相關關鍵字",
+                "queries_count": 0
             })
 
-        topics = trends.get("topics", [])
-        queries = trends.get("queries", [])
+        # 格式化為 queries 格式
+        queries = [
+            {
+                "query": kw.get("keyword", ""),
+                "type": "related",
+                "value": kw.get("search_volume", 0)
+            }
+            for kw in labs_keywords
+        ]
 
         return jsonify({
             "success": True,
-            "topics_count": len(topics),
+            "topics_count": 0,  # Labs API 不提供 topics
             "queries_count": len(queries),
-            "message": "測試成功",
-            "sample_topics": topics[:3] if topics else [],
-            "sample_queries": queries[:3] if queries else []
+            "message": "測試成功 (使用 DataForSEO Labs API)",
+            "sample_queries": queries[:5] if queries else []
         })
     except Exception as e:
-        logger.error(f"[DEBUG] Trends test error: {str(e)}")
+        logger.error(f"[DEBUG] Labs test error: {str(e)}")
         return jsonify({
             "success": False,
             "message": f"錯誤: {str(e)}"
@@ -851,7 +857,7 @@ def raw_api_test():
     try:
         data = request.get_json()
         keyword = data.get("keyword", "長者").strip()
-        api_type = data.get("api_type", "trends")  # trends, metrics, serp, suggestions
+        api_type = data.get("api_type", "trends")  # trends, metrics, serp, suggestions, labs
 
         if not dataforseo_client.is_configured():
             return jsonify({"success": False, "message": "DataForSEO API 未配置"})
@@ -863,6 +869,15 @@ def raw_api_test():
             request_data = [{
                 "keywords": [keyword],  # 修正：使用複數形式
                 "location_code": 2344
+            }]
+        elif api_type == "labs":
+            endpoint = "dataforseo_labs/google/related_keywords/live"
+            # DataForSEO Labs API 用於取得相關關鍵字
+            request_data = [{
+                "keyword": keyword,
+                "location_code": 2344,
+                "language_code": "zh-TW",
+                "limit": 50
             }]
         elif api_type == "metrics":
             endpoint = "keywords_data/google_ads/search_volume/live"

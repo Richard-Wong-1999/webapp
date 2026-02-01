@@ -506,6 +506,74 @@ class DataForSEOClient:
             "error": None
         }
 
+    def get_related_keywords_labs(
+        self,
+        keyword: str,
+        location_code: int = 2344,  # Hong Kong
+        language_code: str = "zh-TW",
+        limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """使用 DataForSEO Labs API 取得相關關鍵字
+
+        這個 API 是 Google Trends 相關查詢的替代方案，
+        可以可靠地返回相關關鍵字數據。
+
+        Args:
+            keyword: 種子關鍵字
+            location_code: 位置代碼（2344 = 香港）
+            language_code: 語言代碼
+            limit: 返回數量限制
+
+        Returns:
+            [{
+                "keyword": str,
+                "search_volume": int,
+                "keyword_info": {...}
+            }]
+
+        API 費用: $0.05/次
+        """
+        logger.info(f"[Labs] Requesting related keywords for: {keyword}")
+
+        data = [{
+            "keyword": keyword,
+            "location_code": location_code,
+            "language_code": language_code,
+            "limit": limit
+        }]
+
+        result = self._make_request(
+            "POST",
+            "dataforseo_labs/google/related_keywords/live",
+            data
+        )
+
+        related_keywords = []
+
+        if result.get("error"):
+            logger.error(f"[Labs] API error: {result['error']}")
+            return related_keywords
+
+        try:
+            tasks = result.get("tasks", [])
+            if tasks and tasks[0].get("result"):
+                for item in tasks[0]["result"]:
+                    # Labs API 返回的數據結構
+                    items = item.get("items", [])
+                    for kw_item in items:
+                        related_keywords.append({
+                            "keyword": kw_item.get("keyword", ""),
+                            "search_volume": kw_item.get("keyword_info", {}).get("search_volume", 0),
+                            "cpc": kw_item.get("keyword_info", {}).get("cpc", 0),
+                            "competition": kw_item.get("keyword_info", {}).get("competition", 0),
+                            "monthly_searches": kw_item.get("keyword_info", {}).get("monthly_searches", [])
+                        })
+        except Exception as e:
+            logger.error(f"[Labs] Parsing error: {e}")
+
+        logger.info(f"[Labs] Retrieved {len(related_keywords)} related keywords")
+        return related_keywords
+
     def is_configured(self) -> bool:
         """檢查是否已配置 API 憑證"""
         return bool(self.login and self.password)
