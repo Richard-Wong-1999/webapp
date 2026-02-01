@@ -723,12 +723,15 @@ def test_trends():
             return jsonify({"success": False, "message": "DataForSEO API 未配置"})
 
         # 使用 DataForSEO Labs API 取得相關關鍵字
-        labs_keywords = dataforseo_client.get_related_keywords_labs(keyword, limit=20)
+        labs_data = dataforseo_client.get_related_keywords_labs(keyword, limit=20)
+
+        # 取得相關關鍵字列表
+        related_keywords = labs_data.get("related_keywords", [])
 
         # 記錄完整回應供診斷
-        logger.info(f"[DEBUG] Labs API response count: {len(labs_keywords)}")
+        logger.info(f"[DEBUG] Labs API response: seed_metrics={bool(labs_data.get('seed_keyword_metrics'))}, related_count={len(related_keywords)}")
 
-        if not labs_keywords:
+        if not related_keywords:
             return jsonify({
                 "success": False,
                 "message": "API 未返回相關關鍵字",
@@ -742,7 +745,7 @@ def test_trends():
                 "type": "related",
                 "value": kw.get("search_volume", 0)
             }
-            for kw in labs_keywords
+            for kw in related_keywords
         ]
 
         return jsonify({
