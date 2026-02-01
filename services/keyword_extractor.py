@@ -80,7 +80,8 @@ def extract_keywords_from_deepseek(summaries: List[str]) -> List[str]:
         關鍵字列表
     """
     if not summaries:
-        return ["（沒有近30天新聞稿資料）"]
+        logger.info("⚠️ 沒有文章摘要，返回空關鍵字列表")
+        return []
 
     joined_text = "\n\n".join(summaries[:10])
     prompt = (
@@ -97,7 +98,8 @@ def extract_keywords_from_deepseek(summaries: List[str]) -> List[str]:
 
     output = call_deepseek(prompt)
     if not output:
-        return ["（DeepSeek 無回應或 API 失敗）"]
+        logger.warning("⚠️ DeepSeek 無回應或 API 失敗，返回空關鍵字列表")
+        return []
 
     keywords = [kw.strip() for kw in output.replace("，", ",").split(",") if kw.strip()]
     return keywords[:20]
@@ -287,8 +289,8 @@ def compute_and_store_keywords(source: str, days: int = 7) -> List[str]:
 
     except Exception as e:
         logger.error(f"❌ 關鍵字計算失敗（{source}）：{e}")
-        store_keywords(source, ["（關鍵字更新失敗）"], error=str(e))
-        return ["（關鍵字更新失敗）"]
+        store_keywords(source, [], error=str(e))
+        return []
 
 
 def get_relevant_reference_blocks(
