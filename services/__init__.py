@@ -22,6 +22,7 @@ from .keyword_extractor import (
     get_cached_keywords,
     store_keywords,
     compute_and_store_keywords,
+    clear_article_cache,
     get_relevant_reference_blocks,
     keywords_cache,
     keywords_cache_lock
@@ -72,6 +73,7 @@ __all__ = [
     'get_cached_keywords',
     'store_keywords',
     'compute_and_store_keywords',
+    'clear_article_cache',
     'get_relevant_reference_blocks',
     'keywords_cache',
     'keywords_cache_lock',

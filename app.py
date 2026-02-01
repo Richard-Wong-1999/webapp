@@ -26,6 +26,7 @@ from services import (
     normalize_source,
     get_cached_keywords,
     compute_and_store_keywords,
+    clear_article_cache,
     keywords_cache,
     keywords_cache_lock,
     background_generate_articles,
@@ -144,6 +145,9 @@ def background_crawl_ha(days=30):
             status="completed",
             message=f"✅ HA 爬蟲完成！共 {len(ha_files)} 篇文章。關鍵字將自動更新。"
         )
+
+        # 清除舊的文章快取，確保讀取最新資料
+        clear_article_cache("ha")
 
         # 爬完立刻更新 HA keywords cache（使用與爬蟲相同的天數）
         logger.info(f"🔄 開始更新 HA 關鍵字快取（days={days}）...")

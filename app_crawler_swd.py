@@ -16,7 +16,7 @@ import trafilatura
 from config import Config
 from utils.logger import logger
 from utils.text_processing import parse_ymd_date, make_safe_filename, derive_date_from_text_zh
-from services.keyword_extractor import compute_and_store_keywords
+from services.keyword_extractor import compute_and_store_keywords, clear_article_cache
 
 # SWD 爬虫进度资讯
 crawl_progress = {
@@ -310,6 +310,9 @@ def background_crawl_news():
             "status": "completed",
             "message": f"✅ 完成！已輸出 {merged_count} 份中英對照 JSON（近 {days} 天 SWD 列表）。"
         })
+
+        # 清除舊的文章快取，確保讀取最新資料
+        clear_article_cache("swd")
 
         # 爬完立刻更新 SWD keywords cache
         compute_and_store_keywords("swd", days=30)

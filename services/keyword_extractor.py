@@ -11,6 +11,28 @@ from utils.cache_manager import cache_manager
 from services.deepseek_client import call_deepseek
 
 
+def clear_article_cache(source: str = None):
+    """清除文章快取
+
+    Args:
+        source: 資料來源，若為 None 則清除所有來源的快取
+    """
+    if source:
+        source = normalize_source(source)
+        # 清除該來源的所有天數快取
+        for days in [7, 30, 60]:
+            cache_key = f"articles_{source}_{days}"
+            cache_manager.clear(cache_key)
+        logger.info(f"🗑️ 已清除 {source} 的文章快取")
+    else:
+        # 清除所有來源的快取
+        for src in ["swd", "ha"]:
+            for days in [7, 30, 60]:
+                cache_key = f"articles_{src}_{days}"
+                cache_manager.clear(cache_key)
+        logger.info("🗑️ 已清除所有文章快取")
+
+
 # 關鍵字快取結構（帶 TTL）
 keywords_cache = {
     "swd": {"keywords": [], "updated_at": 0, "expires_at": 0, "error": ""},
