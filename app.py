@@ -795,7 +795,7 @@ def test_serp():
         if not dataforseo_client.is_configured():
             return jsonify({"success": False, "message": "DataForSEO API 未配置"})
 
-        serp = dataforseo_client.get_serp_results(keyword, num=5)
+        serp = dataforseo_client.get_serp_results(keyword, num=10)
 
         if serp.get("error"):
             return jsonify({
@@ -877,19 +877,21 @@ def raw_api_test():
             request_data = [{
                 "keywords": [keyword],  # 修正：使用複數形式
                 "location_code": 2344,
-                "include_seed_keyword": True,
-                "limit": 20
+                "include_seed_keyword": False,  # 修改：不包含種子關鍵字，只返回相關建議
+                "limit": 50,
+                "sort_by": "search_volume"  # 新增：按搜尋量排序
             }]
         elif api_type == "serp":
             endpoint = "serp/google/organic/live/regular"
             # SERP API 可以接受 language_code
+            # depth 應該更大以獲取足夠的 organic 結果
             request_data = [{
                 "keyword": keyword,
                 "location_code": 2344,
                 "language_code": "zh-TW",
                 "device": "desktop",
                 "os": "windows",
-                "depth": 5
+                "depth": 30  # 修改：增加以獲取更多結果
             }]
         else:
             return jsonify({"success": False, "message": "無效的 API 類型"})

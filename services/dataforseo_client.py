@@ -165,7 +165,14 @@ class DataForSEOClient:
         queries = []
 
         def parse_trends_result(result: Dict) -> tuple:
-            """解析 Trends API 回應"""
+            """解析 Trends API 回應
+
+            正確的數據結構：
+            result[0].items[] 包含多種類型：
+              - type: "google_trends_graph" (趨勢圖)
+              - type: "google_trends_queries_list" (相關查詢)
+              - type: "google_trends_topics_list" (相關主題)
+            """
             parsed_topics = []
             parsed_queries = []
 
@@ -175,38 +182,61 @@ class DataForSEOClient:
             try:
                 tasks = result.get("tasks", [])
                 if tasks and tasks[0].get("result"):
-                    for item in tasks[0]["result"]:
-                        # 處理相關主題
-                        related_topics = item.get("related_topics", {})
-                        for topic in related_topics.get("rising", []) or []:
-                            parsed_topics.append({
-                                "topic_title": topic.get("topic_title", ""),
-                                "type": "rising",
-                                "value": topic.get("value", 0)
-                            })
-                        for topic in related_topics.get("top", []) or []:
-                            parsed_topics.append({
-                                "topic_title": topic.get("topic_title", ""),
-                                "type": "top",
-                                "value": topic.get("value", 0)
-                            })
+                    for result_item in tasks[0]["result"]:
+                        # 遍歷 items 數組，尋找相關查詢和主題
+                        items = result_item.get("items", [])
 
-                        # 處理相關查詢
-                        related_queries = item.get("related_queries", {})
-                        for query in related_queries.get("rising", []) or []:
-                            parsed_queries.append({
-                                "query": query.get("query", ""),
-                                "type": "rising",
-                                "value": query.get("value", 0)
-                            })
-                        for query in related_queries.get("top", []) or []:
-                            parsed_queries.append({
-                                "query": query.get("query", ""),
-                                "type": "top",
-                                "value": query.get("value", 0)
-                            })
+                        for item in items:
+                            item_type = item.get("type", "")
+
+                            # 處理相關主題 (google_trends_topics_list)
+                            if item_type == "google_trends_topics_list":
+                                data = item.get("data", {})
+
+                                # Rising topics
+                                for topic in data.get("rising", []) or []:
+                                    parsed_topics.append({
+                                        "topic_title": topic.get("topic_title", ""),
+                                        "topic_type": topic.get("topic_type", ""),
+                                        "type": "rising",
+                                        "value": topic.get("value", 0)
+                                    })
+
+                                # Top topics
+                                for topic in data.get("top", []) or []:
+                                    parsed_topics.append({
+                                        "topic_title": topic.get("topic_title", ""),
+                                        "topic_type": topic.get("topic_type", ""),
+                                        "type": "top",
+                                        "value": topic.get("value", 0)
+                                    })
+
+                            # 處理相關查詢 (google_trends_queries_list)
+                            elif item_type == "google_trends_queries_list":
+                                data = item.get("data", {})
+
+                                # Rising queries
+                                for query in data.get("rising", []) or []:
+                                    parsed_queries.append({
+                                        "query": query.get("query", ""),
+                                        "type": "rising",
+                                        "value": query.get("value", 0)
+                                    })
+
+                                # Top queries
+                                for query in data.get("top", []) or []:
+                                    parsed_queries.append({
+                                        "query": query.get("query", ""),
+                                        "type": "top",
+                                        "value": query.get("value", 0)
+                                    })
+
+                        # 記錄診斷信息
+                        item_types = [item.get("type") for item in items]
+                        logger.info(f"[Trends] Found item types: {item_types}")
+
             except Exception as e:
-                logger.error(f"Error parsing trends data: {e}")
+                logger.error(f"Error parsing trends data: {e}", exc_info=True)
 
             return parsed_topics, parsed_queries
 
@@ -230,7 +260,7 @@ class DataForSEOClient:
         language_code: str = None,  # 不再使用
         limit: int = 50
     ) -> List[Dict[str, Any]]:
-        """取得關鍵字建議
+        """取得關鍵字建議（支持智能降級）
 
         Args:
             keyword: 種子關鍵字
@@ -240,13 +270,19 @@ class DataForSEOClient:
 
         Returns:
             [{"keyword": str, "search_volume": int, "cpc": float, "competition": float}]
+
+        行為說明：
+        - 優先嘗試 include_seed_keyword=False（只返回相關建議）
+        - 如果沒有結果，降級為 include_seed_keyword=True（包含原始關鍵字）
+        - 適用於中文關鍵字在 Google Ads 數據較少的情況
         """
-        # 注意：API 需要 "keywords" (複數) 參數，格式為數組
+        # 第一次嘗試：不包含種子關鍵字，只獲取相關建議
         data = [{
-            "keywords": [keyword],  # 修正：使用複數形式，數組格式
+            "keywords": [keyword],
             "location_code": location_code,
-            "include_seed_keyword": True,
-            "limit": limit
+            "include_seed_keyword": False,  # 優先嘗試：不包含種子關鍵字
+            "limit": limit,
+            "sort_by": "search_volume"
         }]
 
         result = self._make_request(
@@ -258,7 +294,7 @@ class DataForSEOClient:
         suggestions = []
 
         if result.get("error"):
-            logger.error(f"Keyword suggestions error: {result['error']}")
+            logger.error(f"[Suggestions] API error: {result['error']}")
             return suggestions
 
         try:
@@ -274,8 +310,45 @@ class DataForSEOClient:
                         "monthly_searches": item.get("monthly_searches", [])
                     })
         except Exception as e:
-            logger.error(f"Error parsing keyword suggestions: {e}")
+            logger.error(f"[Suggestions] Parsing error: {e}")
 
+        # 智能降級：如果沒有建議，重試並包含種子關鍵字
+        if not suggestions:
+            logger.warning(f"[Suggestions] No results for '{keyword}' with include_seed_keyword=False, retrying with True")
+
+            data_fallback = [{
+                "keywords": [keyword],
+                "location_code": location_code,
+                "include_seed_keyword": True,  # 降級：包含種子關鍵字
+                "limit": limit,
+                "sort_by": "search_volume"
+            }]
+
+            result_fallback = self._make_request(
+                "POST",
+                "keywords_data/google_ads/keywords_for_keywords/live",
+                data_fallback
+            )
+
+            if not result_fallback.get("error"):
+                try:
+                    tasks = result_fallback.get("tasks", [])
+                    if tasks and tasks[0].get("result"):
+                        for item in tasks[0]["result"]:
+                            suggestions.append({
+                                "keyword": item.get("keyword", ""),
+                                "search_volume": item.get("search_volume", 0),
+                                "cpc": item.get("cpc", 0),
+                                "competition": item.get("competition", 0),
+                                "competition_level": item.get("competition_level", ""),
+                                "monthly_searches": item.get("monthly_searches", []),
+                                "is_seed": item.get("keyword") == keyword  # 標記是否為種子關鍵字
+                            })
+                        logger.info(f"[Suggestions] Fallback successful, got {len(suggestions)} result(s)")
+                except Exception as e:
+                    logger.error(f"[Suggestions] Fallback parsing error: {e}")
+
+        logger.info(f"[Suggestions] Final count for '{keyword}': {len(suggestions)}")
         return suggestions
 
     def get_keyword_metrics(
@@ -353,7 +426,7 @@ class DataForSEOClient:
             keyword: 搜尋關鍵字
             location_code: 位置代碼
             language_code: 語言代碼
-            num: 返回結果數量
+            num: 返回結果數量（organic results）
 
         Returns:
             {
@@ -363,13 +436,16 @@ class DataForSEOClient:
                 "error": str (if failed)
             }
         """
+        # depth 需要設置更大以確保獲取足夠的 organic 結果
+        # 因為前面的位置可能被廣告、local pack 等佔據
+        # 設置 depth = num * 3 以確保有足夠的結果
         data = [{
             "keyword": keyword,
             "location_code": location_code,
             "language_code": language_code,
             "device": "desktop",
             "os": "windows",
-            "depth": num
+            "depth": max(num * 3, 30)  # 修改：增加 depth 以獲取更多 organic 結果
         }]
 
         result = self._make_request(

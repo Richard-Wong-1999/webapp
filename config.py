@@ -57,9 +57,10 @@ class Config:
     DATAFORSEO_RATE_LIMIT = 0.5  # 請求/秒
 
     # SEO 快取 TTL（秒）
-    SEO_TRENDS_CACHE_TTL = 3600      # 1 小時
-    SEO_KEYWORD_CACHE_TTL = 86400    # 24 小時
-    SEO_SERP_CACHE_TTL = 21600       # 6 小時
+    # 延長快取時間以降低 API 調用頻率和成本
+    SEO_TRENDS_CACHE_TTL = 21600      # 6 小時（從 1 小時延長）
+    SEO_KEYWORD_CACHE_TTL = 604800    # 7 天（從 24 小時延長）
+    SEO_SERP_CACHE_TTL = 86400        # 24 小時（從 6 小時延長）
 
     # 爬蟲設定
     SCRAPE_TIMEOUT = 10
