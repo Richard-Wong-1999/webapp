@@ -581,12 +581,15 @@ class DataForSEOClient:
 
                     for kw_item in items:
                         depth = kw_item.get("depth", 0)
-                        keyword_info = kw_item.get("keyword_info", {})
 
-                        keyword_data = {
-                            "keyword": kw_item.get("keyword", ""),
+                        # 正確的數據路徑：kw_item -> keyword_data -> keyword_info
+                        kw_data = kw_item.get("keyword_data", {})
+                        keyword_info = kw_data.get("keyword_info", {})
+
+                        keyword_entry = {
+                            "keyword": kw_data.get("keyword", ""),
                             "search_volume": keyword_info.get("search_volume", 0),
-                            "cpc": keyword_info.get("cpc", 0),
+                            "cpc": keyword_info.get("cpc") or 0,  # cpc 可能是 null
                             "competition": keyword_info.get("competition", 0),
                             "competition_level": keyword_info.get("competition_level", ""),
                             "monthly_searches": keyword_info.get("monthly_searches", [])
@@ -594,12 +597,12 @@ class DataForSEOClient:
 
                         # depth=0 是種子關鍵字本身的指標
                         if depth == 0:
-                            seed_metrics = keyword_data
-                            logger.info(f"[Labs] Seed keyword: {keyword_data['keyword']}, "
-                                      f"search_volume: {keyword_data['search_volume']}")
+                            seed_metrics = keyword_entry
+                            logger.info(f"[Labs] Seed keyword: {keyword_entry['keyword']}, "
+                                      f"search_volume: {keyword_entry['search_volume']}")
                         # depth=1 是相關關鍵字
                         elif depth == 1:
-                            related_keywords.append(keyword_data)
+                            related_keywords.append(keyword_entry)
 
         except Exception as e:
             logger.error(f"[Labs] Parsing error: {e}", exc_info=True)
