@@ -618,13 +618,21 @@ def background_generate_articles(
             continue
 
     # 批次插入資料庫
+    saved_count = 0
     for art in all_articles:
-        result = insert_article(art)
-        if result.get("success"):
-            title = art.get("title_zh") or art.get("title") or "未命名"
-            article_generation_progress.titles.append(title)
+        try:
+            result = insert_article(art)
+            if result.get("success"):
+                title = art.get("title_zh") or art.get("title") or "未命名"
+                article_generation_progress.titles.append(title)
+                saved_count += 1
+                logger.info(f"✅ 已儲存文章: {title}")
+            else:
+                logger.error(f"❌ 儲存文章失敗: {result.get('message', '未知錯誤')}")
+        except Exception as e:
+            logger.error(f"❌ 儲存文章時發生異常: {e}")
 
-    logger.info(f"✅ 成功儲存 {len(all_articles)} 篇雙語文章到資料庫")
+    logger.info(f"✅ 成功儲存 {saved_count}/{len(all_articles)} 篇雙語文章到資料庫")
 
     # 完成
     article_generation_progress.update(running=False)
@@ -659,6 +667,7 @@ def background_generate_articles_by_source(
         generated_prompts[timestamp] = []
 
     logger.info(f"🚀 開始生成 {total_articles} 篇文章（keyword_source={keyword_source}）")
+    logger.info(f"📋 關鍵字來源映射: {keyword_sources_map}")
 
     # 準備備用內容（使用 SWD 新聞稿）
     source_for_fallback = 'swd'
@@ -684,11 +693,14 @@ def background_generate_articles_by_source(
             # 決定實際來源
             if keyword_sources_map and kw in keyword_sources_map:
                 actual_source = keyword_sources_map[kw]
+                logger.info(f"📌 關鍵字「{kw}」使用映射來源: {actual_source}")
             elif keyword_source == 'mixed':
                 # 如果沒有映射且是 mixed，預設使用 swd
                 actual_source = 'swd'
+                logger.info(f"📌 關鍵字「{kw}」無映射，預設使用: swd")
             else:
                 actual_source = keyword_source
+                logger.info(f"📌 關鍵字「{kw}」使用全域來源: {actual_source}")
 
             futures.append(
                 executor.submit(
@@ -754,14 +766,26 @@ def background_generate_articles_by_source(
             logger.error(f"原始輸出：{output_text[:400]}...")
             continue
 
-    # 批次插入資料庫
-    for art in all_articles:
-        result = insert_article(art)
-        if result.get("success"):
-            title = art.get("title_zh") or art.get("title") or "未命名"
-            article_generation_progress.titles.append(title)
+    logger.info(f"📊 解析完成，準備儲存 {len(all_articles)} 篇文章")
 
-    logger.info(f"✅ 成功儲存 {len(all_articles)} 篇雙語文章到資料庫")
+    # 批次插入資料庫
+    saved_count = 0
+    for art in all_articles:
+        try:
+            logger.info(f"💾 正在儲存文章: {art.get('title_zh', '未命名')[:30]}...")
+            result = insert_article(art)
+            if result.get("success"):
+                title = art.get("title_zh") or art.get("title") or "未命名"
+                article_generation_progress.titles.append(title)
+                saved_count += 1
+                logger.info(f"✅ 已儲存文章: {title} (ID: {result.get('id', 'unknown')})")
+            else:
+                logger.error(f"❌ 儲存文章失敗: {result.get('message', '未知錯誤')}")
+        except Exception as e:
+            logger.error(f"❌ 儲存文章時發生異常: {e}", exc_info=True)
+
+    logger.info(f"✅ 成功儲存 {saved_count}/{len(all_articles)} 篇雙語文章到資料庫")
 
     # 完成
     article_generation_progress.update(running=False)
+    logger.info("🏁 background_generate_articles_by_source 任務完成")

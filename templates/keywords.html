@@ -505,26 +505,44 @@
       const area = document.getElementById("keywordArea");
       if (!area) return;
 
+      console.log('[Keywords] Rendering all keywords:', {
+        swd: allKeywords.swd.length,
+        ha: allKeywords.ha.length,
+        seo: allKeywords.seo.length
+      });
+
       const allItems = [];
+      const seenKeywords = new Set();
 
       // 添加 SWD 關鍵字
       allKeywords.swd.forEach(kw => {
-        allItems.push({ keyword: kw, source: 'swd' });
+        if (!seenKeywords.has(kw)) {
+          allItems.push({ keyword: kw, source: 'swd' });
+          seenKeywords.add(kw);
+        }
       });
 
-      // 添加 HA 關鍵字
+      // 添加 HA 關鍵字（標記為 HA，即使與 SWD 重複也顯示，但排在後面）
       allKeywords.ha.forEach(kw => {
-        // 避免重複
-        if (!allItems.find(item => item.keyword === kw)) {
+        if (!seenKeywords.has(kw)) {
           allItems.push({ keyword: kw, source: 'ha' });
+          seenKeywords.add(kw);
         }
       });
 
       // 添加 SEO 關鍵字（置頂）
-      const seoItems = allKeywords.seo.map(kw => ({ keyword: kw, source: 'seo' }));
+      const seoItems = [];
+      allKeywords.seo.forEach(kw => {
+        if (!seenKeywords.has(kw)) {
+          seoItems.push({ keyword: kw, source: 'seo' });
+          seenKeywords.add(kw);
+        }
+      });
 
       // SEO 關鍵字置頂
       const finalItems = [...seoItems, ...allItems];
+
+      console.log('[Keywords] Final items count:', finalItems.length);
 
       if (finalItems.length === 0) {
         area.innerHTML = '<p id="keywordEmpty">目前沒有可分析的關鍵字。請爬取新聞稿或使用 SEO 關鍵字研究。</p>';
@@ -575,8 +593,8 @@
     }
 
     async function fetchKeywords(source) {
-      const url = `/keywords_json?source=${encodeURIComponent(source)}`;
-      const res = await fetch(url);
+      const url = `/keywords_json?source=${encodeURIComponent(source)}&_t=${Date.now()}`;
+      const res = await fetch(url, { cache: 'no-store' });
       const data = await res.json();
       return data.keywords || [];
     }
@@ -599,10 +617,14 @@
     }
 
     async function refreshKeywordsForSource(source) {
+      console.log(`[Keywords] Refreshing keywords for source: ${source}`);
       try {
-        const url = `/keywords_json?source=${encodeURIComponent(source)}&force=1`;
-        const res = await fetch(url);
+        const url = `/keywords_json?source=${encodeURIComponent(source)}&force=1&_t=${Date.now()}`;
+        const res = await fetch(url, { cache: 'no-store' });
         const data = await res.json();
+
+        console.log(`[Keywords] Received ${(data.keywords || []).length} keywords for ${source}`, data.keywords);
+
         allKeywords[source] = data.keywords || [];
 
         renderAllKeywords();

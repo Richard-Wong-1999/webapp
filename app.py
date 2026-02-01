@@ -271,6 +271,8 @@ def generate_articles():
     selected_keywords = request.form.getlist("selected_keywords")
     keyword_source = request.form.get("keyword_source", "swd")
 
+    logger.info(f"📝 收到生成請求: {len(selected_keywords)} 個關鍵字, keyword_source={keyword_source}")
+
     # 獲取每個關鍵字的來源映射（從隱藏欄位或 data 屬性）
     keyword_sources_map = {}
     for key, value in request.form.items():
@@ -281,10 +283,13 @@ def generate_articles():
     # 如果沒有映射，嘗試從 JSON 獲取
     if not keyword_sources_map:
         sources_json = request.form.get("keyword_sources_json", "{}")
+        logger.info(f"📝 keyword_sources_json: {sources_json}")
         try:
             keyword_sources_map = json.loads(sources_json)
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"❌ 解析 keyword_sources_json 失敗: {e}")
+
+    logger.info(f"📝 keyword_sources_map: {keyword_sources_map}")
 
     # 標準化 keyword_source
     if keyword_source not in ('swd', 'ha', 'seo', 'trends', 'mixed'):
