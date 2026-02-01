@@ -47,7 +47,10 @@
 
           <!-- Trends 面板 -->
           <div class="seo-panel" id="trendsPanel">
-            <h4>📈 相關關鍵字 <small>(DataForSEO Labs)</small></h4>
+            <h4>📈 相關關鍵字 <small>(DataForSEO Labs - 點擊可加入生成清單)</small></h4>
+            <p style="font-size: 12px; color: #666; margin: 5px 0 10px 0;">
+              💡 點擊任一關鍵字將自動加入生成清單，並使用 <strong>SERP 爬蟲</strong> 作為參考資料
+            </p>
             <div class="seo-tags" id="trendsQueries"></div>
           </div>
 
@@ -128,6 +131,22 @@
           </div>
         </div>
 
+        <!-- 關鍵字來源圖例 -->
+        <div style="padding: 10px; background: #f8f9fa; border-radius: 8px; margin: 15px 0; font-size: 13px;">
+          <strong>🎨 關鍵字來源：</strong>
+          <div style="display: flex; gap: 15px; margin-top: 8px; flex-wrap: wrap;">
+            <span style="display: flex; align-items: center; gap: 5px;">
+              <span style="width: 20px; height: 3px; background: #2196f3;"></span> 🔵 SWD（新聞稿）
+            </span>
+            <span style="display: flex; align-items: center; gap: 5px;">
+              <span style="width: 20px; height: 3px; background: #ff9800;"></span> 🟠 HA（新聞稿）
+            </span>
+            <span style="display: flex; align-items: center; gap: 5px;">
+              <span style="width: 20px; height: 3px; background: #4caf50;"></span> 🟢 SEO（SERP 爬蟲）
+            </span>
+          </div>
+        </div>
+
         <!-- 生成按鈕區 -->
         <div class="generate-actions">
           <button type="submit" id="btnGenerate">
@@ -158,14 +177,19 @@
           <li>分析關鍵字的搜尋量、CPC、競爭程度</li>
           <li>查看相關關鍵字（DataForSEO Labs API）</li>
           <li>獲取關鍵字建議（Google Ads API）</li>
-          <li>點擊建議關鍵字可加入生成清單</li>
+          <li><strong>點擊相關關鍵字或建議關鍵字可加入生成清單</strong></li>
         </ul>
 
         <p><strong>📝 文章生成</strong></p>
         <ul style="line-height: 1.8;">
-          <li><strong>SWD/HA 關鍵字</strong>：使用新聞稿作為參考資料</li>
-          <li><strong>SEO 研究關鍵字</strong>：使用搜尋結果作為參考資料</li>
+          <li><strong>🔵 SWD 關鍵字</strong>：使用社會福利署新聞稿作為參考</li>
+          <li><strong>🟠 HA 關鍵字</strong>：使用醫院管理局新聞稿作為參考</li>
+          <li><strong>🟢 SEO 關鍵字</strong>：自動進行 SERP 爬蟲，使用搜尋引擎結果作為參考</li>
         </ul>
+
+        <p style="padding: 10px; background: #fff3cd; border-left: 3px solid #ffc107; font-size: 13px; margin-top: 10px;">
+          <strong>💡 提示：</strong> SEO 來源的關鍵字會自動爬取 Google 搜尋結果的前 5 個網站內容，作為文章生成的參考資料。
+        </p>
 
         <hr style="margin: 20px 0; opacity: 0.3;">
 
@@ -272,12 +296,26 @@
         document.getElementById('metricCompetition').textContent =
           data.metrics.competition_level || 'N/A';
 
-        // 更新 Trends 查詢
+        // 更新 Trends 查詢（相關關鍵字 - 可點擊）
         const queriesEl = document.getElementById('trendsQueries');
         const queries = (data.trends.queries || []).slice(0, 10);
-        queriesEl.innerHTML = queries.map(q =>
-          `<span class="seo-tag">${escapeHtml(q.query)}</span>`
-        ).join('');
+        queriesEl.innerHTML = queries.map(q => {
+          const keyword = q.query || '';
+          const volume = q.value || 0;
+          return `<span class="seo-tag clickable" onclick="addRelatedKeywordToList('${escapeHtml(keyword)}', ${volume})" title="點擊加入生成清單">
+            ${escapeHtml(keyword)} <small>(${volume.toLocaleString()})</small>
+          </span>`;
+        }).join('');
+
+        // 儲存相關關鍵字的指標（Labs API 數據）
+        window.seoRelatedMetrics = {};
+        queries.forEach(q => {
+          window.seoRelatedMetrics[q.query] = {
+            keyword: q.query,
+            search_volume: q.value || 0,
+            type: 'related'
+          };
+        });
 
         // 更新建議關鍵字
         const suggestionsEl = document.getElementById('suggestionsList');
@@ -306,6 +344,55 @@
         btn.disabled = false;
         btn.textContent = '分析關鍵字';
       }
+    }
+
+    function addRelatedKeywordToList(keyword, searchVolume) {
+      // 檢查是否已存在
+      const keywordArea = document.getElementById('keywordArea');
+      const existing = keywordArea.querySelector(`input[value="${keyword}"]`);
+      if (existing) {
+        existing.checked = true;
+        existing.closest('.keyword-item-enhanced').style.background = '#e3f2fd';
+        setTimeout(() => {
+          existing.closest('.keyword-item-enhanced').style.background = '';
+        }, 1000);
+        return;
+      }
+
+      // 新增到列表
+      const listEl = document.getElementById('keywordList');
+      if (!listEl) {
+        keywordArea.innerHTML = '<div class="keyword-list" id="keywordList"></div>';
+      }
+
+      const metricsHtml = `
+        <span class="seo-badge volume">${(searchVolume || 0).toLocaleString()}</span>
+        <span class="seo-badge source">Labs API</span>
+      `;
+
+      const itemHtml = `
+        <div class="keyword-item-enhanced" style="background: #e1f5fe;" data-source="seo">
+          <input type="checkbox" name="selected_keywords" value="${escapeHtml(keyword)}" checked data-source="seo">
+          <span class="keyword-text">${escapeHtml(keyword)}</span>
+          <span class="keyword-metrics">${metricsHtml}</span>
+        </div>
+      `;
+
+      document.getElementById('keywordList').insertAdjacentHTML('afterbegin', itemHtml);
+
+      // 標記為 SEO 來源（會使用 SERP 爬蟲）
+      setKeywordSource('seo');
+
+      // 更新選擇狀態
+      syncSelectionFromDOM(activeSource);
+
+      // 視覺反饋
+      setTimeout(() => {
+        const newItem = keywordArea.querySelector(`input[value="${keyword}"]`);
+        if (newItem) {
+          newItem.closest('.keyword-item-enhanced').style.background = '#c8e6c9';
+        }
+      }, 50);
     }
 
     function addSuggestionToList(keyword) {
@@ -471,11 +558,15 @@
         const safe = String(kw);
         const escaped = escapeHtml(safe);
 
+        // 添加來源標記和徽章
+        const sourceLabel = source === 'ha' ? 'HA' : 'SWD';
+        const sourceBadge = `<span class="seo-badge source">${sourceLabel}</span>`;
+
         return `
-          <div class="keyword-item-enhanced">
-            <input type="checkbox" name="selected_keywords" value="${escaped}">
+          <div class="keyword-item-enhanced" data-source="${source}">
+            <input type="checkbox" name="selected_keywords" value="${escaped}" data-source="${source}">
             <span class="keyword-text">${escaped}</span>
-            <span class="keyword-metrics" data-keyword="${escaped}"></span>
+            <span class="keyword-metrics" data-keyword="${escaped}">${sourceBadge}</span>
           </div>
         `;
       }).join("");
@@ -754,6 +845,51 @@
           e.preventDefault();
           researchKeyword();
         }
+      });
+
+      // 表單提交驗證：智能設置 keyword_source
+      document.getElementById('generateForm').addEventListener('submit', (e) => {
+        const checked = document.querySelectorAll('input[name="selected_keywords"]:checked');
+        if (checked.length === 0) {
+          e.preventDefault();
+          alert('請至少選擇一個關鍵字');
+          return;
+        }
+
+        // 檢查所有選中關鍵字的來源
+        const sources = new Set();
+        checked.forEach(cb => {
+          const source = cb.getAttribute('data-source') || activeSource;
+          sources.add(source);
+        });
+
+        // 如果混合了多種來源，警告用戶
+        if (sources.size > 1) {
+          const sourcesArray = Array.from(sources);
+          const confirmed = confirm(
+            `您選擇了來自不同來源的關鍵字：${sourcesArray.join(', ').toUpperCase()}\n\n` +
+            `建議只選擇同一來源的關鍵字以獲得最佳效果。\n\n` +
+            `- SEO 來源：使用搜尋引擎結果作為參考\n` +
+            `- SWD/HA 來源：使用新聞稿作為參考\n\n` +
+            `是否繼續？`
+          );
+          if (!confirmed) {
+            e.preventDefault();
+            return;
+          }
+        }
+
+        // 智能設置 keyword_source（優先使用 SEO）
+        let finalSource = activeSource;
+        if (sources.has('seo')) {
+          finalSource = 'seo';
+        } else if (sources.has('ha')) {
+          finalSource = 'ha';
+        } else if (sources.has('swd')) {
+          finalSource = 'swd';
+        }
+
+        document.getElementById('keywordSourceInput').value = finalSource;
       });
     });
   </script>
