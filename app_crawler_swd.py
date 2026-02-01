@@ -194,7 +194,7 @@ def background_crawl_news():
                 "message": f"沒有找到近 {days} 天新聞資料"
             })
             # 即使沒資料，也更新一次 keywords cache
-            compute_and_store_keywords("swd", days=7)
+            compute_and_store_keywords("swd", days=30)
             return
 
         visited_infogov = set()
@@ -312,7 +312,7 @@ def background_crawl_news():
         })
 
         # 爬完立刻更新 SWD keywords cache
-        compute_and_store_keywords("swd", days=7)
+        compute_and_store_keywords("swd", days=30)
 
     except Exception as e:
         crawl_progress.update({

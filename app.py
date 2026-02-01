@@ -134,14 +134,20 @@ def background_crawl_ha(days=30):
             enable_debug_html=True,
         )
 
+        # 列出爬取結果
+        import os as _os
+        ha_files = [f for f in _os.listdir(Config.HA_DIR) if f.endswith(".json") and f != "press_releases_recent.json"]
+        logger.info(f"✅ HA 爬蟲完成，共儲存 {len(ha_files)} 個 JSON 檔案到 {Config.HA_DIR}")
+
         ha_crawl_progress.update(
             running=False,
             status="completed",
-            message="✅ HA 爬蟲完成！關鍵字將自動更新。"
+            message=f"✅ HA 爬蟲完成！共 {len(ha_files)} 篇文章。關鍵字將自動更新。"
         )
 
-        # 爬完立刻更新 HA keywords cache
-        compute_and_store_keywords("ha", days=7)
+        # 爬完立刻更新 HA keywords cache（使用與爬蟲相同的天數）
+        logger.info(f"🔄 開始更新 HA 關鍵字快取（days={days}）...")
+        compute_and_store_keywords("ha", days=days)
 
     except Exception as e:
         ha_crawl_progress.update(
@@ -172,7 +178,7 @@ def keywords():
         result = cached.get("keywords") or []
 
     if not result:
-        result = compute_and_store_keywords(source=source, days=7)
+        result = compute_and_store_keywords(source=source, days=30)
 
     return render_template("keywords.html", keywords=result, source=source)
 
@@ -190,7 +196,8 @@ def keywords_json():
         error = cached.get("error") or ""
 
     if force or not cached_keywords:
-        cached_keywords = compute_and_store_keywords(source=source, days=7)
+        # 使用 30 天範圍以匹配爬蟲的範圍
+        cached_keywords = compute_and_store_keywords(source=source, days=30)
         with keywords_cache_lock:
             updated_at = keywords_cache[source].get("updated_at") or 0
             error = keywords_cache[source].get("error") or ""
@@ -718,6 +725,77 @@ def test_selenium():
             "success": False,
             "message": f"Selenium 錯誤: {str(e)}"
         })
+
+
+@app.route("/debug/ha")
+def debug_ha():
+    """HA 爬蟲診斷頁面"""
+    import os
+    from datetime import datetime, timedelta
+
+    ha_dir = Config.HA_DIR
+    dir_exists = os.path.exists(ha_dir)
+
+    files_info = []
+    if dir_exists:
+        for fn in sorted(os.listdir(ha_dir)):
+            if fn.endswith(".json") and fn != "press_releases_recent.json":
+                filepath = os.path.join(ha_dir, fn)
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    published = data.get("published", "unknown")
+                    title = data.get("title", "無標題")[:50]
+                    para_count = len(data.get("paragraphs", []))
+                    files_info.append({
+                        "filename": fn,
+                        "published": published,
+                        "title": title,
+                        "paragraphs": para_count
+                    })
+                except Exception as e:
+                    files_info.append({
+                        "filename": fn,
+                        "error": str(e)
+                    })
+
+    # 計算日期範圍
+    today = datetime.now().date()
+    cutoff_30 = (today - timedelta(days=30)).isoformat()
+    cutoff_60 = (today - timedelta(days=60)).isoformat()
+
+    # 統計在範圍內的文章數
+    articles_30 = sum(1 for f in files_info if f.get("published", "") >= cutoff_30)
+    articles_60 = sum(1 for f in files_info if f.get("published", "") >= cutoff_60)
+
+    return f"""
+    <html>
+    <head><title>HA 爬蟲診斷</title></head>
+    <body style="font-family: monospace; padding: 20px;">
+        <h1>🔍 HA 爬蟲診斷</h1>
+        <h2>基本資訊</h2>
+        <ul>
+            <li><strong>HA 資料夾：</strong> {ha_dir}</li>
+            <li><strong>資料夾存在：</strong> {'✅ 是' if dir_exists else '❌ 否'}</li>
+            <li><strong>JSON 檔案數：</strong> {len(files_info)}</li>
+            <li><strong>今天日期：</strong> {today.isoformat()}</li>
+            <li><strong>30 天前：</strong> {cutoff_30}</li>
+            <li><strong>60 天前：</strong> {cutoff_60}</li>
+        </ul>
+        <h2>統計</h2>
+        <ul>
+            <li><strong>30 天內文章：</strong> {articles_30}</li>
+            <li><strong>60 天內文章：</strong> {articles_60}</li>
+        </ul>
+        <h2>檔案列表（最新 20 個）</h2>
+        <table border="1" cellpadding="5">
+            <tr><th>檔名</th><th>發布日期</th><th>標題</th><th>段落數</th></tr>
+            {''.join(f'<tr><td>{f.get("filename","")}</td><td>{f.get("published","")}</td><td>{f.get("title","")}</td><td>{f.get("paragraphs","")}</td></tr>' for f in files_info[-20:])}
+        </table>
+        <p><a href="/keywords">← 返回關鍵字頁</a></p>
+    </body>
+    </html>
+    """
 
 
 @app.route("/api/debug/test_trends", methods=["POST"])

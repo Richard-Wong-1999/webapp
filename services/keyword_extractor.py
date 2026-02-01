@@ -217,24 +217,31 @@ def get_recent_articles_text(source: str = "swd", days: int = 30) -> List[str]:
 
     # 讀取檔案
     folder = get_source_dir(source)
+    logger.info(f"📂 [{source}] 正在讀取資料夾: {folder}")
+
     if not os.path.exists(folder):
-        logger.warning(f"⚠️ 資料夾不存在：{folder}")
+        logger.warning(f"⚠️ [{source}] 資料夾不存在：{folder}")
         return []
+
+    # 列出資料夾中的所有檔案
+    all_files = os.listdir(folder)
+    json_files = [f for f in all_files if f.endswith(".json") and f != "press_releases_recent.json"]
+    logger.info(f"📂 [{source}] 找到 {len(json_files)} 個 JSON 檔案")
 
     recent_blocks = []
     today = datetime.now().date()
     cutoff = today - timedelta(days=days)
+    logger.info(f"📅 [{source}] 日期範圍: {cutoff} 至 {today}")
 
-    for fn in os.listdir(folder):
-        if not fn.endswith(".json") or fn == "press_releases_recent.json":
-            continue
-
+    skipped_old = 0
+    for fn in json_files:
         try:
             with open(os.path.join(folder, fn), "r", encoding="utf-8") as f:
                 data = json.load(f)
 
             d = parse_date_from_item(source, data)
             if d < cutoff:
+                skipped_old += 1
                 continue
 
             block = make_reference_block_from_json(source, data)
@@ -242,7 +249,9 @@ def get_recent_articles_text(source: str = "swd", days: int = 30) -> List[str]:
                 recent_blocks.append(block)
 
         except Exception as e:
-            logger.warning(f"⚠️ 讀取錯誤: {fn} - {e}")
+            logger.warning(f"⚠️ [{source}] 讀取錯誤: {fn} - {e}")
+
+    logger.info(f"📊 [{source}] 結果: {len(recent_blocks)} 篇符合日期，{skipped_old} 篇因日期過舊被跳過")
 
     # 若無資料，擴大到60天
     if not recent_blocks:
@@ -269,7 +278,7 @@ def get_recent_articles_text(source: str = "swd", days: int = 30) -> List[str]:
     return recent_blocks
 
 
-def compute_and_store_keywords(source: str, days: int = 7) -> List[str]:
+def compute_and_store_keywords(source: str, days: int = 30) -> List[str]:
     """重新計算並儲存關鍵字
 
     Args:
