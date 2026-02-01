@@ -492,6 +492,17 @@ input[type="checkbox"] {
   font-weight: 500;
 }
 
+.seo-badge.difficulty {
+  background: #fce4ec;
+  color: #c2185b;
+}
+
+.seo-badge.intent {
+  background: #f3e5f5;
+  color: #7b1fa2;
+  font-size: 10px;
+}
+
 /* 關鍵字來源標記 */
 .keyword-item-enhanced[data-source="seo"] {
   border-left: 3px solid #4caf50;

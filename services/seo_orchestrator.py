@@ -477,7 +477,7 @@ def analyze_keyword_full(keyword: str, skip_scraping: bool = False) -> Dict[str,
             update_progress("scraping", "正在爬取競爭對手網站...", 2)
 
             urls_to_scrape = []
-            for item in serp["organic_results"][:5]:  # 只爬前 5 個
+            for item in serp["organic_results"][:10]:  # 爬前 10 個作為參考
                 url = item.get("url", "")
                 if url:
                     # 先檢查快取

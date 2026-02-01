@@ -358,37 +358,42 @@ def generate_single_article_by_source(
     keyword_source: str,
     timestamp: str,
     total_articles: int,
-    fallback_content: str
+    fallback_content: str,
+    actual_source: str = None
 ) -> tuple:
     """根據關鍵字來源生成文章
 
-    根據 keyword_source 決定使用哪種參考資料：
+    根據 keyword_source 或 actual_source 決定使用哪種參考資料：
     - 'swd', 'ha': 使用新聞稿作為參考
     - 'seo', 'trends': 使用 SERP 爬蟲內容作為參考
 
     Args:
         article_index: 文章索引
         main_keyword: 主要關鍵詞
-        keyword_source: 關鍵字來源類型 ('swd', 'ha', 'seo', 'trends')
+        keyword_source: 關鍵字來源類型 ('swd', 'ha', 'seo', 'trends', 'mixed')
         timestamp: 時間戳記
         total_articles: 總文章數
         fallback_content: 備用參考內容
+        actual_source: 實際的關鍵字來源（當 keyword_source='mixed' 時使用）
 
     Returns:
         (索引, 輸出文本, 關鍵詞列表, prompt_zh)
     """
     chosen_keywords = [main_keyword]
 
+    # 決定實際使用的來源
+    effective_source = actual_source if actual_source else keyword_source
+
     logger.info(
         f"📝 正在生成第 {article_index + 1}/{total_articles} 篇文章，"
-        f"主題：{main_keyword}（keyword_source={keyword_source}）"
+        f"主題：{main_keyword}（effective_source={effective_source}）"
     )
 
     # 根據來源類型決定參考資料
-    if keyword_source in ('swd', 'ha'):
+    if effective_source in ('swd', 'ha'):
         # 使用新聞稿作為參考
         reference_blocks = get_relevant_reference_blocks(
-            source=keyword_source,
+            source=effective_source,
             keywords=[main_keyword],
             days=30,
             limit=10
@@ -402,13 +407,13 @@ def generate_single_article_by_source(
                 prefer_bilingual=True
             )
             if reference_content:
-                logger.info(f"✅ 為關鍵詞「{main_keyword}」找到相關新聞（{keyword_source}）")
+                logger.info(f"✅ 為關鍵詞「{main_keyword}」找到相關新聞（{effective_source}）")
             else:
                 reference_content = fallback_content
                 logger.warning(f"⚠️ 「{main_keyword}」相關新聞無法組出可用參考，改用 fallback")
         else:
             reference_content = fallback_content
-            logger.warning(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（{keyword_source}）")
+            logger.warning(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（{effective_source}）")
 
         reference_section_title = "📰 參考新聞資料（中英並列）"
     else:
@@ -421,7 +426,8 @@ def generate_single_article_by_source(
                 scraped_content = seo_result.get("scraped_content", [])
 
                 if scraped_content:
-                    reference_content = build_serp_reference_section(scraped_content, max_items=5)
+                    # 改為 10 篇參考資料
+                    reference_content = build_serp_reference_section(scraped_content, max_items=10)
                     logger.info(f"✅ 成功取得「{main_keyword}」的 SERP 爬蟲內容（{len(scraped_content)} 個網站）")
                 else:
                     reference_content = fallback_content
@@ -627,14 +633,16 @@ def background_generate_articles(
 def background_generate_articles_by_source(
     selected_keywords: List[str],
     timestamp: str,
-    keyword_source: str = "swd"
+    keyword_source: str = "swd",
+    keyword_sources_map: Dict[str, str] = None
 ):
     """背景生成文章（根據關鍵字來源選擇參考資料）
 
     Args:
         selected_keywords: 選中的關鍵詞列表
         timestamp: 時間戳記
-        keyword_source: 關鍵字來源類型 ('swd', 'ha', 'seo', 'trends')
+        keyword_source: 關鍵字來源類型 ('swd', 'ha', 'seo', 'trends', 'mixed')
+        keyword_sources_map: 每個關鍵字的實際來源映射（當 keyword_source='mixed' 時使用）
     """
     total_articles = len(selected_keywords)
 
@@ -652,8 +660,8 @@ def background_generate_articles_by_source(
 
     logger.info(f"🚀 開始生成 {total_articles} 篇文章（keyword_source={keyword_source}）")
 
-    # 準備備用內容（使用對應來源的新聞稿）
-    source_for_fallback = keyword_source if keyword_source in ('swd', 'ha') else 'swd'
+    # 準備備用內容（使用 SWD 新聞稿）
+    source_for_fallback = 'swd'
     recent_blocks = get_recent_articles_text(source=source_for_fallback, days=30)
     if not recent_blocks:
         logger.warning("⚠️ 沒有找到近期新聞，將使用關鍵字生成")
@@ -670,18 +678,30 @@ def background_generate_articles_by_source(
 
     # 使用線程池生成文章
     with ThreadPoolExecutor(max_workers=Config.ARTICLE_GENERATION_WORKERS) as executor:
-        futures = [
-            executor.submit(
-                generate_single_article_by_source,
-                i,
-                selected_keywords[i],
-                keyword_source,
-                timestamp,
-                total_articles,
-                fallback_content
+        futures = []
+        for i in range(total_articles):
+            kw = selected_keywords[i]
+            # 決定實際來源
+            if keyword_sources_map and kw in keyword_sources_map:
+                actual_source = keyword_sources_map[kw]
+            elif keyword_source == 'mixed':
+                # 如果沒有映射且是 mixed，預設使用 swd
+                actual_source = 'swd'
+            else:
+                actual_source = keyword_source
+
+            futures.append(
+                executor.submit(
+                    generate_single_article_by_source,
+                    i,
+                    kw,
+                    keyword_source,
+                    timestamp,
+                    total_articles,
+                    fallback_content,
+                    actual_source
+                )
             )
-            for i in range(total_articles)
-        ]
 
         for future in as_completed(futures):
             try:

@@ -614,6 +614,126 @@ class DataForSEOClient:
             "related_keywords": related_keywords
         }
 
+    def get_related_keywords_labs_full(
+        self,
+        keyword: str,
+        location_code: int = 2344,  # Hong Kong
+        language_code: str = "zh-TW",
+        limit: int = 50
+    ) -> Dict[str, Any]:
+        """使用 DataForSEO Labs API 取得完整關鍵字數據
+
+        與 get_related_keywords_labs 相比，此方法返回更多詳細資料：
+        - keyword_difficulty（關鍵字難度）
+        - search_intent_info（搜尋意圖）
+        - serp_info（SERP 資訊）
+        - avg_backlinks_info（平均反向連結）
+        - search_volume_trend（搜尋量趨勢）
+
+        Args:
+            keyword: 種子關鍵字
+            location_code: 位置代碼（2344 = 香港）
+            language_code: 語言代碼
+            limit: 返回相關關鍵字數量限制
+
+        Returns:
+            {
+                "seed_keyword_metrics": {
+                    "keyword": str,
+                    "search_volume": int,
+                    "cpc": float,
+                    "competition": float,
+                    "competition_level": str,
+                    "keyword_difficulty": int,
+                    "search_intent": str,
+                    "serp_count": int,
+                    "serp_item_types": [str],
+                    "avg_backlinks": float,
+                    "search_volume_trend": {...},
+                    "monthly_searches": [...]
+                },
+                "related_keywords": [{...}]
+            }
+        """
+        logger.info(f"[Labs Full] Requesting complete keyword data for: {keyword}")
+
+        data = [{
+            "keyword": keyword,
+            "location_code": location_code,
+            "language_code": language_code,
+            "limit": limit
+        }]
+
+        result = self._make_request(
+            "POST",
+            "dataforseo_labs/google/related_keywords/live",
+            data
+        )
+
+        seed_metrics = {}
+        related_keywords = []
+
+        if result.get("error"):
+            logger.error(f"[Labs Full] API error: {result['error']}")
+            return {
+                "seed_keyword_metrics": seed_metrics,
+                "related_keywords": related_keywords
+            }
+
+        try:
+            tasks = result.get("tasks", [])
+            if tasks and tasks[0].get("result"):
+                for result_item in tasks[0]["result"]:
+                    items = result_item.get("items", [])
+
+                    for kw_item in items:
+                        depth = kw_item.get("depth", 0)
+
+                        # 完整數據路徑
+                        kw_data = kw_item.get("keyword_data", {})
+                        keyword_info = kw_data.get("keyword_info", {})
+                        keyword_props = kw_data.get("keyword_properties", {})
+                        serp_info = kw_data.get("serp_info", {})
+                        search_intent = kw_data.get("search_intent_info", {})
+                        backlinks_info = kw_data.get("avg_backlinks_info", {})
+
+                        keyword_entry = {
+                            "keyword": kw_data.get("keyword", ""),
+                            "search_volume": keyword_info.get("search_volume", 0),
+                            "cpc": keyword_info.get("cpc") or 0,
+                            "competition": keyword_info.get("competition", 0),
+                            "competition_level": keyword_info.get("competition_level", ""),
+                            "monthly_searches": keyword_info.get("monthly_searches", []),
+                            # 額外的完整數據
+                            "keyword_difficulty": keyword_props.get("keyword_difficulty"),
+                            "search_intent": search_intent.get("main_intent"),
+                            "serp_count": serp_info.get("se_results_count"),
+                            "serp_item_types": serp_info.get("serp_item_types", []),
+                            "avg_backlinks": backlinks_info.get("backlinks"),
+                            "search_volume_trend": keyword_info.get("search_volume_trend", {})
+                        }
+
+                        # depth=0 是種子關鍵字本身的指標
+                        if depth == 0:
+                            seed_metrics = keyword_entry
+                            logger.info(f"[Labs Full] Seed keyword: {keyword_entry['keyword']}, "
+                                      f"search_volume: {keyword_entry['search_volume']}, "
+                                      f"difficulty: {keyword_entry['keyword_difficulty']}, "
+                                      f"intent: {keyword_entry['search_intent']}")
+                        # depth=1 是相關關鍵字
+                        elif depth == 1:
+                            related_keywords.append(keyword_entry)
+
+        except Exception as e:
+            logger.error(f"[Labs Full] Parsing error: {e}", exc_info=True)
+
+        logger.info(f"[Labs Full] Retrieved seed metrics + {len(related_keywords)} related keywords")
+
+        return {
+            "seed_keyword_metrics": seed_metrics,
+            "related_keywords": related_keywords
+        }
+
     def is_configured(self) -> bool:
         """檢查是否已配置 API 憑證"""
         return bool(self.login and self.password)

@@ -269,12 +269,26 @@ def get_crawl_progress_ha():
 def generate_articles():
     """生成文章（根據關鍵字來源選擇參考資料）"""
     selected_keywords = request.form.getlist("selected_keywords")
-    source = normalize_source(request.form.get("source", "swd"))
-    keyword_source = request.form.get("keyword_source", source)
+    keyword_source = request.form.get("keyword_source", "swd")
+
+    # 獲取每個關鍵字的來源映射（從隱藏欄位或 data 屬性）
+    keyword_sources_map = {}
+    for key, value in request.form.items():
+        if key.startswith("keyword_source_"):
+            kw = key.replace("keyword_source_", "")
+            keyword_sources_map[kw] = value
+
+    # 如果沒有映射，嘗試從 JSON 獲取
+    if not keyword_sources_map:
+        sources_json = request.form.get("keyword_sources_json", "{}")
+        try:
+            keyword_sources_map = json.loads(sources_json)
+        except:
+            pass
 
     # 標準化 keyword_source
-    if keyword_source not in ('swd', 'ha', 'seo', 'trends'):
-        keyword_source = source
+    if keyword_source not in ('swd', 'ha', 'seo', 'trends', 'mixed'):
+        keyword_source = 'swd'
 
     if not selected_keywords or len(selected_keywords) < 1:
         return render_template(
@@ -290,7 +304,7 @@ def generate_articles():
     # 使用新的根據來源生成函數
     threading.Thread(
         target=background_generate_articles_by_source,
-        args=(selected_keywords, timestamp, keyword_source)
+        args=(selected_keywords, timestamp, keyword_source, keyword_sources_map)
     ).start()
 
     return render_template("generate.html")
@@ -458,33 +472,25 @@ def seo_keyword_research():
             }), 500
 
         # 使用 Labs API 一次性獲取所有數據（替代 3 個 API）
-        labs_data = dataforseo_client.get_related_keywords_labs(keyword, limit=30)
+        labs_data = dataforseo_client.get_related_keywords_labs_full(keyword, limit=30)
 
         seed_metrics = labs_data.get("seed_keyword_metrics", {})
         related = labs_data.get("related_keywords", [])
 
-        # 構建 trends 格式（用於相關查詢面板）
-        queries = [
-            {
-                "query": r.get("keyword", ""),
-                "type": "related",
-                "value": r.get("search_volume", 0)
-            }
-            for r in related
-        ]
-
         return jsonify({
             "success": True,
             "keyword": keyword,
-            "trends": {
-                "topics": [],  # Labs API 不提供 topics
-                "queries": queries
-            },
             "metrics": {
                 "search_volume": seed_metrics.get("search_volume", 0),
                 "cpc": seed_metrics.get("cpc", 0),
                 "competition": seed_metrics.get("competition", 0),
-                "competition_level": seed_metrics.get("competition_level", "")
+                "competition_level": seed_metrics.get("competition_level", ""),
+                "keyword_difficulty": seed_metrics.get("keyword_difficulty"),
+                "search_intent": seed_metrics.get("search_intent"),
+                "serp_count": seed_metrics.get("serp_count"),
+                "serp_item_types": seed_metrics.get("serp_item_types", []),
+                "search_volume_trend": seed_metrics.get("search_volume_trend", {}),
+                "avg_backlinks": seed_metrics.get("avg_backlinks")
             },
             "suggestions": related
         })

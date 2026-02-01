@@ -42,21 +42,52 @@
                 <div class="seo-metric-value" id="metricCompetition">-</div>
                 <div class="seo-metric-label">競爭程度</div>
               </div>
+              <div class="seo-metric">
+                <div class="seo-metric-value" id="metricDifficulty">-</div>
+                <div class="seo-metric-label">難度</div>
+              </div>
+            </div>
+            <!-- 詳細指標 -->
+            <div class="seo-metrics-detail" id="metricsDetail" style="display:none; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;">
+                <div>
+                  <strong>搜尋意圖：</strong>
+                  <span id="metricIntent">-</span>
+                </div>
+                <div>
+                  <strong>SERP 結果數：</strong>
+                  <span id="metricSerpCount">-</span>
+                </div>
+                <div>
+                  <strong>趨勢（月）：</strong>
+                  <span id="metricTrendMonthly">-</span>
+                </div>
+                <div>
+                  <strong>趨勢（季）：</strong>
+                  <span id="metricTrendQuarterly">-</span>
+                </div>
+                <div>
+                  <strong>趨勢（年）：</strong>
+                  <span id="metricTrendYearly">-</span>
+                </div>
+                <div>
+                  <strong>平均反向連結：</strong>
+                  <span id="metricBacklinks">-</span>
+                </div>
+              </div>
+              <div style="margin-top: 10px;">
+                <strong>SERP 項目類型：</strong>
+                <span id="metricSerpTypes" style="font-size: 12px; color: #666;">-</span>
+              </div>
             </div>
           </div>
 
-          <!-- Trends 面板 -->
-          <div class="seo-panel" id="trendsPanel">
-            <h4>📈 相關關鍵字 <small>(DataForSEO Labs - 點擊可加入生成清單)</small></h4>
-            <p style="font-size: 12px; color: #666; margin: 5px 0 10px 0;">
-              💡 點擊任一關鍵字將自動加入生成清單，並使用 <strong>SERP 爬蟲</strong> 作為參考資料
-            </p>
-            <div class="seo-tags" id="trendsQueries"></div>
-          </div>
-
-          <!-- 建議關鍵字面板 -->
+          <!-- 相關關鍵字面板（合併顯示） -->
           <div class="seo-panel" id="suggestionsPanel">
             <h4>💡 相關關鍵字建議 <small>(點擊可加入生成清單)</small></h4>
+            <p style="font-size: 12px; color: #666; margin: 5px 0 10px 0;">
+              點擊任一關鍵字將自動加入生成清單，並使用 <strong>SERP 爬蟲</strong> 作為參考資料
+            </p>
             <div id="suggestionsList"></div>
           </div>
         </div>
@@ -86,41 +117,15 @@
         </div>
       </div>
 
-      <div style="margin-top:10px; font-size: 14px;">
-          <b>目前關鍵字來源：</b>
-          <span id="currentSourceLabel">
-            {% if (source or 'swd') == 'ha' %}
-              HA（醫院管理局新聞稿）
-            {% else %}
-              SWD（社會福利署新聞稿）
-            {% endif %}
-          </span>
-          <div style="margin-top:6px; display:flex; gap:10px; flex-wrap:wrap;">
-            <button type="button" class="crawl-btn" id="tabSwdBtn" onclick="switchSource('swd')">切換到 SWD 關鍵字</button>
-            <button type="button" class="crawl-btn" id="tabHaBtn" onclick="switchSource('ha')">切換到 HA 關鍵字</button>
-          </div>
-        </div>
-
-      <h2>🔥 近30天關鍵字分析</h2>
+      <h2 style="margin-top: 15px;">🔥 關鍵字清單（全部來源）</h2>
 
       <form action="/generate_articles" method="post" id="generateForm">
-        <input type="hidden" name="source" id="sourceInput" value="{{ source or 'swd' }}">
-        <input type="hidden" name="keyword_source" id="keywordSourceInput" value="{{ source or 'swd' }}">
+        <input type="hidden" name="source" id="sourceInput" value="mixed">
+        <input type="hidden" name="keyword_source" id="keywordSourceInput" value="mixed">
+        <input type="hidden" name="keyword_sources_json" id="keywordSourcesJson" value="{}">
 
         <div id="keywordArea">
-          {% if keywords %}
-          <div class="keyword-list" id="keywordList">
-            {% for kw in keywords %}
-            <div class="keyword-item-enhanced">
-              <input type="checkbox" name="selected_keywords" value="{{ kw }}">
-              <span class="keyword-text">{{ kw }}</span>
-              <span class="keyword-metrics" data-keyword="{{ kw }}"></span>
-            </div>
-            {% endfor %}
-          </div>
-          {% else %}
-          <p id="keywordEmpty">目前沒有可分析的新聞資料。</p>
-          {% endif %}
+          <p id="keywordLoading" style="color: #666; font-style: italic;">正在載入關鍵字...</p>
         </div>
 
         <!-- SEO 分析進度 -->
@@ -156,12 +161,7 @@
       </form>
 
       <p class="note" id="sourceNote">
-        資料來源：
-        {% if (source or 'swd') == 'ha' %}
-          醫院管理局（HA）新聞稿（自動化爬蟲）
-        {% else %}
-          香港社會福利署（SWD）新聞稿（自動化爬蟲）
-        {% endif %}
+        資料來源：SWD（社會福利署）+ HA（醫院管理局）新聞稿 + SEO 關鍵字研究
       </p>
     </div>
 
@@ -288,47 +288,70 @@
         // 顯示結果
         resultsEl.classList.add('active');
 
-        // 更新指標
+        // 更新基本指標
         document.getElementById('metricVolume').textContent =
           (data.metrics.search_volume || 0).toLocaleString();
         document.getElementById('metricCPC').textContent =
           '$' + (data.metrics.cpc || 0).toFixed(2);
         document.getElementById('metricCompetition').textContent =
           data.metrics.competition_level || 'N/A';
+        document.getElementById('metricDifficulty').textContent =
+          data.metrics.keyword_difficulty !== undefined ? data.metrics.keyword_difficulty : '-';
 
-        // 更新 Trends 查詢（相關關鍵字 - 可點擊）
-        const queriesEl = document.getElementById('trendsQueries');
-        const queries = (data.trends.queries || []).slice(0, 10);
-        queriesEl.innerHTML = queries.map(q => {
-          const keyword = q.query || '';
-          const volume = q.value || 0;
-          return `<span class="seo-tag clickable" onclick="addRelatedKeywordToList('${escapeHtml(keyword)}', ${volume})" title="點擊加入生成清單">
-            ${escapeHtml(keyword)} <small>(${volume.toLocaleString()})</small>
-          </span>`;
-        }).join('');
+        // 更新詳細指標
+        const detailEl = document.getElementById('metricsDetail');
+        if (data.metrics.search_intent || data.metrics.serp_count || data.metrics.search_volume_trend) {
+          detailEl.style.display = 'block';
 
-        // 儲存相關關鍵字的指標（Labs API 數據）
-        window.seoRelatedMetrics = {};
-        queries.forEach(q => {
-          window.seoRelatedMetrics[q.query] = {
-            keyword: q.query,
-            search_volume: q.value || 0,
-            type: 'related'
-          };
-        });
+          // 搜尋意圖
+          document.getElementById('metricIntent').textContent =
+            data.metrics.search_intent || '-';
 
-        // 更新建議關鍵字
+          // SERP 結果數
+          document.getElementById('metricSerpCount').textContent =
+            data.metrics.serp_count ? data.metrics.serp_count.toLocaleString() : '-';
+
+          // 趨勢
+          const trend = data.metrics.search_volume_trend || {};
+          const formatTrend = (v) => v !== undefined ? (v >= 0 ? `+${v}%` : `${v}%`) : '-';
+          document.getElementById('metricTrendMonthly').textContent = formatTrend(trend.monthly);
+          document.getElementById('metricTrendQuarterly').textContent = formatTrend(trend.quarterly);
+          document.getElementById('metricTrendYearly').textContent = formatTrend(trend.yearly);
+
+          // 反向連結
+          document.getElementById('metricBacklinks').textContent =
+            data.metrics.avg_backlinks !== undefined ? Math.round(data.metrics.avg_backlinks) : '-';
+
+          // SERP 項目類型
+          const serpTypes = data.metrics.serp_item_types || [];
+          document.getElementById('metricSerpTypes').textContent =
+            serpTypes.length > 0 ? serpTypes.join(', ') : '-';
+        } else {
+          detailEl.style.display = 'none';
+        }
+
+        // 更新建議關鍵字（合併所有相關關鍵字）
         const suggestionsEl = document.getElementById('suggestionsList');
-        const suggestions = (data.suggestions || []).slice(0, 15);
-        suggestionsEl.innerHTML = suggestions.map(s => `
-          <div class="seo-suggestion-item" onclick="addSuggestionToList('${escapeHtml(s.keyword)}')">
-            <span class="seo-suggestion-keyword">${escapeHtml(s.keyword)}</span>
-            <span class="seo-suggestion-metrics">
-              <span>搜尋量: ${(s.search_volume || 0).toLocaleString()}</span>
-              <span>CPC: $${(s.cpc || 0).toFixed(2)}</span>
-            </span>
-          </div>
-        `).join('');
+        const suggestions = (data.suggestions || []).slice(0, 20);
+        suggestionsEl.innerHTML = suggestions.map(s => {
+          const difficultyBadge = s.keyword_difficulty !== undefined
+            ? `<span class="seo-badge difficulty">難度: ${s.keyword_difficulty}</span>`
+            : '';
+          const intentBadge = s.search_intent
+            ? `<span class="seo-badge intent">${s.search_intent}</span>`
+            : '';
+          return `
+            <div class="seo-suggestion-item" onclick="addSuggestionToList('${escapeHtml(s.keyword)}')">
+              <span class="seo-suggestion-keyword">${escapeHtml(s.keyword)}</span>
+              <span class="seo-suggestion-metrics">
+                <span>搜尋量: ${(s.search_volume || 0).toLocaleString()}</span>
+                <span>CPC: $${(s.cpc || 0).toFixed(2)}</span>
+                ${difficultyBadge}
+                ${intentBadge}
+              </span>
+            </div>
+          `;
+        }).join('');
 
         // 儲存建議關鍵字的指標，供列表顯示用
         window.seoSuggestionMetrics = {};
@@ -346,79 +369,47 @@
       }
     }
 
-    function addRelatedKeywordToList(keyword, searchVolume) {
+    function addSeoKeywordToList(keyword, metrics = {}) {
       // 檢查是否已存在
       const keywordArea = document.getElementById('keywordArea');
-      const existing = keywordArea.querySelector(`input[value="${keyword}"]`);
+      const existing = keywordArea.querySelector(`input[value="${escapeHtml(keyword)}"]`);
       if (existing) {
         existing.checked = true;
         existing.closest('.keyword-item-enhanced').style.background = '#e3f2fd';
         setTimeout(() => {
-          existing.closest('.keyword-item-enhanced').style.background = '';
+          existing.closest('.keyword-item-enhanced').style.background = '#e8f5e9';
         }, 1000);
+        selectedKeywords.add(keyword);
         return;
       }
 
-      // 新增到列表
-      const listEl = document.getElementById('keywordList');
+      // 新增到 SEO 關鍵字列表
+      if (!allKeywords.seo.includes(keyword)) {
+        allKeywords.seo.push(keyword);
+      }
+      selectedKeywords.add(keyword);
+
+      // 新增到 DOM
+      let listEl = document.getElementById('keywordList');
       if (!listEl) {
         keywordArea.innerHTML = '<div class="keyword-list" id="keywordList"></div>';
+        listEl = document.getElementById('keywordList');
       }
 
-      const metricsHtml = `
-        <span class="seo-badge volume">${(searchVolume || 0).toLocaleString()}</span>
-        <span class="seo-badge source">Labs API</span>
-      `;
+      const volumeStr = metrics.search_volume ? (metrics.search_volume).toLocaleString() : '-';
+      const difficultyStr = metrics.keyword_difficulty !== undefined ? metrics.keyword_difficulty : '';
+      const intentStr = metrics.search_intent || '';
 
-      const itemHtml = `
-        <div class="keyword-item-enhanced" style="background: #e1f5fe;" data-source="seo">
-          <input type="checkbox" name="selected_keywords" value="${escapeHtml(keyword)}" checked data-source="seo">
-          <span class="keyword-text">${escapeHtml(keyword)}</span>
-          <span class="keyword-metrics">${metricsHtml}</span>
-        </div>
-      `;
-
-      document.getElementById('keywordList').insertAdjacentHTML('afterbegin', itemHtml);
-
-      // 標記為 SEO 來源（會使用 SERP 爬蟲）
-      setKeywordSource('seo');
-
-      // 更新選擇狀態
-      syncSelectionFromDOM(activeSource);
-
-      // 視覺反饋
-      setTimeout(() => {
-        const newItem = keywordArea.querySelector(`input[value="${keyword}"]`);
-        if (newItem) {
-          newItem.closest('.keyword-item-enhanced').style.background = '#c8e6c9';
-        }
-      }, 50);
-    }
-
-    function addSuggestionToList(keyword) {
-      // 檢查是否已存在
-      const keywordArea = document.getElementById('keywordArea');
-      const existing = keywordArea.querySelector(`input[value="${keyword}"]`);
-      if (existing) {
-        existing.checked = true;
-        existing.closest('.keyword-item-enhanced').style.background = '#e3f2fd';
-        setTimeout(() => {
-          existing.closest('.keyword-item-enhanced').style.background = '';
-        }, 1000);
-        return;
+      let metricsHtml = `<span class="seo-badge source" style="background: #4caf50; color: white;">SEO</span>`;
+      if (metrics.search_volume) {
+        metricsHtml += `<span class="seo-badge volume">${volumeStr}</span>`;
       }
-
-      // 新增到列表
-      const listEl = document.getElementById('keywordList');
-      if (!listEl) {
-        keywordArea.innerHTML = '<div class="keyword-list" id="keywordList"></div>';
+      if (difficultyStr !== '') {
+        metricsHtml += `<span class="seo-badge difficulty">難度: ${difficultyStr}</span>`;
       }
-
-      const metrics = window.seoSuggestionMetrics && window.seoSuggestionMetrics[keyword];
-      const metricsHtml = metrics ? `
-        <span class="seo-badge volume">${(metrics.search_volume || 0).toLocaleString()}</span>
-        <span class="seo-badge competition ${metrics.competition_level || ''}">${metrics.competition_level || ''}</span>
-      ` : '';
+      if (intentStr) {
+        metricsHtml += `<span class="seo-badge intent">${intentStr}</span>`;
+      }
 
       const itemHtml = `
         <div class="keyword-item-enhanced" style="background: #e8f5e9;" data-source="seo">
@@ -428,13 +419,23 @@
         </div>
       `;
 
-      document.getElementById('keywordList').insertAdjacentHTML('afterbegin', itemHtml);
+      listEl.insertAdjacentHTML('afterbegin', itemHtml);
 
-      // 標記為 SEO 來源（因為從 SEO 研究加入的）
-      setKeywordSource('seo');
+      // 視覺反饋
+      setTimeout(() => {
+        const newItem = keywordArea.querySelector(`input[value="${escapeHtml(keyword)}"]`);
+        if (newItem) {
+          newItem.closest('.keyword-item-enhanced').style.background = '#c8e6c9';
+          setTimeout(() => {
+            newItem.closest('.keyword-item-enhanced').style.background = '#e8f5e9';
+          }, 500);
+        }
+      }, 50);
+    }
 
-      // 更新選擇狀態
-      syncSelectionFromDOM(activeSource);
+    function addSuggestionToList(keyword) {
+      const metrics = window.seoSuggestionMetrics && window.seoSuggestionMetrics[keyword];
+      addSeoKeywordToList(keyword, metrics || {});
     }
 
     // ============================================================
@@ -460,12 +461,8 @@
     // ============================================================
     // 全域狀態
     // ============================================================
-    let activeSource = ("{{ source or 'swd' }}").toLowerCase() === "ha" ? "ha" : "swd";
-    const keywordMemory = { swd: null, ha: null };
-    const selectedBySource = {
-      swd: new Set(),
-      ha: new Set()
-    };
+    const allKeywords = { swd: [], ha: [], seo: [] };
+    const selectedKeywords = new Set();
 
     let crawlMonitoring = false;
     let crawlHaMonitoring = false;
@@ -473,11 +470,6 @@
     // ============================================================
     // 小工具
     // ============================================================
-    function normalizeSource(s) {
-      s = String(s || "swd").toLowerCase();
-      return s === "ha" ? "ha" : "swd";
-    }
-
     function escapeHtml(str) {
       return String(str)
         .replaceAll("&", "&amp;")
@@ -487,84 +479,83 @@
         .replaceAll("'", "&#39;");
     }
 
-    function setSourceLabel(source) {
-      const el = document.getElementById("currentSourceLabel");
-      if (!el) return;
-      el.textContent = source === "ha"
-        ? "HA（醫院管理局新聞稿）"
-        : "SWD（社會福利署新聞稿）";
-    }
-
-    function setSourceNote(source) {
-      const el = document.getElementById("sourceNote");
-      if (!el) return;
-      el.textContent = source === "ha"
-        ? "資料來源：醫院管理局（HA）新聞稿（自動化爬蟲）"
-        : "資料來源：香港社會福利署（SWD）新聞稿（自動化爬蟲）";
-    }
-
-    function setSourceInput(source) {
-      const input = document.getElementById("sourceInput");
-      if (input) input.value = source;
-    }
-
-    function updateTabButtons() {
-      const swdBtn = document.getElementById("tabSwdBtn");
-      const haBtn = document.getElementById("tabHaBtn");
-      if (!swdBtn || !haBtn) return;
-
-      swdBtn.disabled = (activeSource === "swd");
-      haBtn.disabled = (activeSource === "ha");
-    }
-
-    function syncSelectionFromDOM(source) {
-      source = normalizeSource(source);
+    function syncSelectionFromDOM() {
       const area = document.getElementById("keywordArea");
       if (!area) return;
 
+      selectedKeywords.clear();
       const checked = area.querySelectorAll('input[type="checkbox"][name="selected_keywords"]:checked');
-      const set = new Set();
-      checked.forEach(cb => set.add(String(cb.value)));
-      selectedBySource[source] = set;
+      checked.forEach(cb => selectedKeywords.add(String(cb.value)));
     }
 
-    function applySelectionToDOM(source) {
-      source = normalizeSource(source);
-      const set = selectedBySource[source] || new Set();
-
+    function applySelectionToDOM() {
       const area = document.getElementById("keywordArea");
       if (!area) return;
 
       const checkboxes = area.querySelectorAll('input[type="checkbox"][name="selected_keywords"]');
       checkboxes.forEach(cb => {
-        cb.checked = set.has(String(cb.value));
+        cb.checked = selectedKeywords.has(String(cb.value));
       });
     }
 
     // ============================================================
     // Keywords rendering
     // ============================================================
-    function renderKeywords(source, keywords) {
-      source = normalizeSource(source);
+    function renderAllKeywords() {
       const area = document.getElementById("keywordArea");
       if (!area) return;
 
-      if (!keywords || keywords.length === 0) {
-        area.innerHTML = '<p id="keywordEmpty">目前沒有可分析的新聞資料。</p>';
+      const allItems = [];
+
+      // 添加 SWD 關鍵字
+      allKeywords.swd.forEach(kw => {
+        allItems.push({ keyword: kw, source: 'swd' });
+      });
+
+      // 添加 HA 關鍵字
+      allKeywords.ha.forEach(kw => {
+        // 避免重複
+        if (!allItems.find(item => item.keyword === kw)) {
+          allItems.push({ keyword: kw, source: 'ha' });
+        }
+      });
+
+      // 添加 SEO 關鍵字（置頂）
+      const seoItems = allKeywords.seo.map(kw => ({ keyword: kw, source: 'seo' }));
+
+      // SEO 關鍵字置頂
+      const finalItems = [...seoItems, ...allItems];
+
+      if (finalItems.length === 0) {
+        area.innerHTML = '<p id="keywordEmpty">目前沒有可分析的關鍵字。請爬取新聞稿或使用 SEO 關鍵字研究。</p>';
         return;
       }
 
-      const itemsHtml = keywords.map(kw => {
-        const safe = String(kw);
-        const escaped = escapeHtml(safe);
+      const itemsHtml = finalItems.map(item => {
+        const escaped = escapeHtml(item.keyword);
 
         // 添加來源標記和徽章
-        const sourceLabel = source === 'ha' ? 'HA' : 'SWD';
-        const sourceBadge = `<span class="seo-badge source">${sourceLabel}</span>`;
+        let sourceLabel, sourceColor;
+        switch(item.source) {
+          case 'ha':
+            sourceLabel = 'HA';
+            sourceColor = '#ff9800';
+            break;
+          case 'seo':
+            sourceLabel = 'SEO';
+            sourceColor = '#4caf50';
+            break;
+          default:
+            sourceLabel = 'SWD';
+            sourceColor = '#2196f3';
+        }
+
+        const sourceBadge = `<span class="seo-badge source" style="background: ${sourceColor}; color: white;">${sourceLabel}</span>`;
+        const bgColor = item.source === 'seo' ? 'background: #e8f5e9;' : '';
 
         return `
-          <div class="keyword-item-enhanced" data-source="${source}">
-            <input type="checkbox" name="selected_keywords" value="${escaped}" data-source="${source}">
+          <div class="keyword-item-enhanced" data-source="${item.source}" style="${bgColor}">
+            <input type="checkbox" name="selected_keywords" value="${escaped}" data-source="${item.source}">
             <span class="keyword-text">${escaped}</span>
             <span class="keyword-metrics" data-keyword="${escaped}">${sourceBadge}</span>
           </div>
@@ -573,58 +564,51 @@
 
       area.innerHTML = `<div class="keyword-list" id="keywordList">${itemsHtml}</div>`;
 
-      applySelectionToDOM(source);
+      applySelectionToDOM();
 
       const listEl = document.getElementById("keywordList");
       if (listEl) {
         listEl.addEventListener("change", () => {
-          syncSelectionFromDOM(source);
+          syncSelectionFromDOM();
         });
       }
     }
 
-    async function fetchKeywords(source, { force = false } = {}) {
-      source = normalizeSource(source);
-      const url = `/keywords_json?source=${encodeURIComponent(source)}${force ? "&force=1" : ""}`;
+    async function fetchKeywords(source) {
+      const url = `/keywords_json?source=${encodeURIComponent(source)}`;
       const res = await fetch(url);
       const data = await res.json();
       return data.keywords || [];
     }
 
-    async function refreshKeywordsForSource(source, { force = true } = {}) {
-      source = normalizeSource(source);
+    async function loadAllKeywords() {
       try {
-        const kws = await fetchKeywords(source, { force });
-        keywordMemory[source] = kws;
+        // 並行載入 SWD 和 HA 關鍵字
+        const [swdKws, haKws] = await Promise.all([
+          fetchKeywords('swd'),
+          fetchKeywords('ha')
+        ]);
 
-        if (activeSource === source) {
-          renderKeywords(source, kws);
-        }
+        allKeywords.swd = swdKws;
+        allKeywords.ha = haKws;
+
+        renderAllKeywords();
       } catch (e) {
-        console.error("refreshKeywordsForSource error:", e);
+        console.error("loadAllKeywords error:", e);
       }
     }
 
-    async function switchSource(source) {
-      source = normalizeSource(source);
+    async function refreshKeywordsForSource(source) {
+      try {
+        const url = `/keywords_json?source=${encodeURIComponent(source)}&force=1`;
+        const res = await fetch(url);
+        const data = await res.json();
+        allKeywords[source] = data.keywords || [];
 
-      syncSelectionFromDOM(activeSource);
-
-      activeSource = source;
-      setSourceLabel(source);
-      setSourceNote(source);
-      setSourceInput(source);
-      setKeywordSource(source);  // 更新 keyword_source
-      updateTabButtons();
-
-      if (keywordMemory[source]) {
-        renderKeywords(source, keywordMemory[source]);
-        return;
+        renderAllKeywords();
+      } catch (e) {
+        console.error("refreshKeywordsForSource error:", e);
       }
-
-      const kws = await fetchKeywords(source, { force: false });
-      keywordMemory[source] = kws;
-      renderKeywords(source, kws);
     }
 
     // ============================================================
@@ -690,7 +674,7 @@
 
           if (data.status === 'completed') {
             status.innerText = (data.message || '已更新') + '（SWD 關鍵字將自動更新）';
-            await refreshKeywordsForSource("swd", { force: true });
+            await refreshKeywordsForSource("swd");
           }
 
           return false;
@@ -763,7 +747,7 @@
 
           if (data.status === 'completed') {
             status.innerText = (data.message || '已更新') + '（HA 關鍵字將自動更新）';
-            await refreshKeywordsForSource("ha", { force: true });
+            await refreshKeywordsForSource("ha");
           }
 
           return false;
@@ -780,27 +764,8 @@
       // 檢查 SEO API 狀態
       await checkSeoApiStatus();
 
-      // 初始化 UI
-      setSourceLabel(activeSource);
-      setSourceNote(activeSource);
-      setSourceInput(activeSource);
-      updateTabButtons();
-
-      // 記錄初始關鍵字
-      try {
-        const initialKeywords = [];
-        const area = document.getElementById("keywordArea");
-        if (area) {
-          const labels = area.querySelectorAll(".keyword-text");
-          labels.forEach(l => initialKeywords.push(l.textContent || ""));
-        }
-        if (initialKeywords.length > 0) {
-          keywordMemory[activeSource] = initialKeywords;
-        }
-        syncSelectionFromDOM(activeSource);
-      } catch (e) {
-        console.warn("init keywordMemory failed:", e);
-      }
+      // 載入所有關鍵字（SWD + HA）
+      await loadAllKeywords();
 
       // 檢查爬蟲狀態
       try {
@@ -847,7 +812,7 @@
         }
       });
 
-      // 表單提交驗證：智能設置 keyword_source
+      // 表單提交驗證：支持混合來源
       document.getElementById('generateForm').addEventListener('submit', (e) => {
         const checked = document.querySelectorAll('input[name="selected_keywords"]:checked');
         if (checked.length === 0) {
@@ -856,40 +821,28 @@
           return;
         }
 
-        // 檢查所有選中關鍵字的來源
-        const sources = new Set();
+        // 構建關鍵字來源映射
+        const sourcesMap = {};
+        const sourceCount = { swd: 0, ha: 0, seo: 0 };
+
         checked.forEach(cb => {
-          const source = cb.getAttribute('data-source') || activeSource;
-          sources.add(source);
+          const keyword = cb.value;
+          const source = cb.getAttribute('data-source') || 'swd';
+          sourcesMap[keyword] = source;
+          sourceCount[source] = (sourceCount[source] || 0) + 1;
         });
 
-        // 如果混合了多種來源，警告用戶
-        if (sources.size > 1) {
-          const sourcesArray = Array.from(sources);
-          const confirmed = confirm(
-            `您選擇了來自不同來源的關鍵字：${sourcesArray.join(', ').toUpperCase()}\n\n` +
-            `建議只選擇同一來源的關鍵字以獲得最佳效果。\n\n` +
-            `- SEO 來源：使用搜尋引擎結果作為參考\n` +
-            `- SWD/HA 來源：使用新聞稿作為參考\n\n` +
-            `是否繼續？`
-          );
-          if (!confirmed) {
-            e.preventDefault();
-            return;
-          }
-        }
+        // 顯示選擇摘要
+        const summary = [];
+        if (sourceCount.swd > 0) summary.push(`SWD: ${sourceCount.swd}`);
+        if (sourceCount.ha > 0) summary.push(`HA: ${sourceCount.ha}`);
+        if (sourceCount.seo > 0) summary.push(`SEO: ${sourceCount.seo}`);
 
-        // 智能設置 keyword_source（優先使用 SEO）
-        let finalSource = activeSource;
-        if (sources.has('seo')) {
-          finalSource = 'seo';
-        } else if (sources.has('ha')) {
-          finalSource = 'ha';
-        } else if (sources.has('swd')) {
-          finalSource = 'swd';
-        }
+        console.log(`生成文章：${summary.join(', ')}`);
 
-        document.getElementById('keywordSourceInput').value = finalSource;
+        // 設置 keyword_source 和 sourcesMap
+        document.getElementById('keywordSourceInput').value = 'mixed';
+        document.getElementById('keywordSourcesJson').value = JSON.stringify(sourcesMap);
       });
     });
   </script>
