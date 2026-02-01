@@ -443,7 +443,7 @@ def test_db():
 # ==========================================================
 @app.route("/api/seo/keyword_research", methods=["POST"])
 def seo_keyword_research():
-    """SEO 關鍵字研究（Trends + Ads 數據）"""
+    """SEO 關鍵字研究（使用 DataForSEO Labs API 一次性獲取所有數據）"""
     try:
         data = request.get_json()
         keyword = data.get("keyword", "").strip()
@@ -457,30 +457,36 @@ def seo_keyword_research():
                 "message": "DataForSEO API 未配置，請設定環境變數"
             }), 500
 
-        # 取得 Trends 數據
-        trends = dataforseo_client.get_google_trends(keyword)
+        # 使用 Labs API 一次性獲取所有數據（替代 3 個 API）
+        labs_data = dataforseo_client.get_related_keywords_labs(keyword, limit=30)
 
-        # 取得關鍵字指標
-        metrics = dataforseo_client.get_keyword_metrics([keyword])
-        keyword_metrics = metrics[0] if metrics else {}
+        seed_metrics = labs_data.get("seed_keyword_metrics", {})
+        related = labs_data.get("related_keywords", [])
 
-        # 取得相關關鍵字建議
-        suggestions = dataforseo_client.get_keyword_suggestions(keyword, limit=30)
+        # 構建 trends 格式（用於相關查詢面板）
+        queries = [
+            {
+                "query": r.get("keyword", ""),
+                "type": "related",
+                "value": r.get("search_volume", 0)
+            }
+            for r in related
+        ]
 
         return jsonify({
             "success": True,
             "keyword": keyword,
             "trends": {
-                "topics": trends.get("topics", []),
-                "queries": trends.get("queries", [])
+                "topics": [],  # Labs API 不提供 topics
+                "queries": queries
             },
             "metrics": {
-                "search_volume": keyword_metrics.get("search_volume", 0),
-                "cpc": keyword_metrics.get("cpc", 0),
-                "competition": keyword_metrics.get("competition", 0),
-                "competition_level": keyword_metrics.get("competition_level", "")
+                "search_volume": seed_metrics.get("search_volume", 0),
+                "cpc": seed_metrics.get("cpc", 0),
+                "competition": seed_metrics.get("competition", 0),
+                "competition_level": seed_metrics.get("competition_level", "")
             },
-            "suggestions": suggestions
+            "suggestions": related
         })
 
     except Exception as e:
@@ -490,7 +496,7 @@ def seo_keyword_research():
 
 @app.route("/api/seo/keyword_suggestions", methods=["GET"])
 def seo_keyword_suggestions():
-    """取得關鍵字建議"""
+    """取得關鍵字建議（使用 Labs API）"""
     try:
         keyword = request.args.get("keyword", "").strip()
         limit = int(request.args.get("limit", "30"))
@@ -504,7 +510,9 @@ def seo_keyword_suggestions():
                 "message": "DataForSEO API 未配置"
             }), 500
 
-        suggestions = dataforseo_client.get_keyword_suggestions(keyword, limit=limit)
+        # 使用 Labs API 獲取相關關鍵字
+        labs_data = dataforseo_client.get_related_keywords_labs(keyword, limit=limit)
+        suggestions = labs_data.get("related_keywords", [])
 
         return jsonify({
             "success": True,
@@ -754,7 +762,7 @@ def test_trends():
 
 @app.route("/api/debug/test_metrics", methods=["POST"])
 def test_metrics():
-    """測試關鍵字指標 API"""
+    """測試關鍵字指標 API（Labs API）"""
     try:
         data = request.get_json()
         keyword = data.get("keyword", "").strip()
@@ -765,21 +773,22 @@ def test_metrics():
         if not dataforseo_client.is_configured():
             return jsonify({"success": False, "message": "DataForSEO API 未配置"})
 
-        metrics = dataforseo_client.get_keyword_metrics([keyword])
+        # 使用 Labs API 獲取種子關鍵字指標
+        labs_data = dataforseo_client.get_related_keywords_labs(keyword, limit=1)
+        seed_metrics = labs_data.get("seed_keyword_metrics", {})
 
-        if not metrics:
+        if not seed_metrics:
             return jsonify({
                 "success": False,
                 "message": "API 未返回數據"
             })
 
-        metric = metrics[0]
         return jsonify({
             "success": True,
-            "search_volume": metric.get("search_volume", 0),
-            "cpc": metric.get("cpc", 0),
-            "competition_level": metric.get("competition_level", ""),
-            "message": "測試成功"
+            "search_volume": seed_metrics.get("search_volume", 0),
+            "cpc": seed_metrics.get("cpc", 0),
+            "competition_level": seed_metrics.get("competition_level", ""),
+            "message": "測試成功 (使用 Labs API)"
         })
     except Exception as e:
         return jsonify({
@@ -835,12 +844,14 @@ def test_suggestions():
         if not dataforseo_client.is_configured():
             return jsonify({"success": False, "message": "DataForSEO API 未配置"})
 
-        suggestions = dataforseo_client.get_keyword_suggestions(keyword, limit=10)
+        # 使用 Labs API 獲取相關關鍵字
+        labs_data = dataforseo_client.get_related_keywords_labs(keyword, limit=10)
+        suggestions = labs_data.get("related_keywords", [])
 
         return jsonify({
             "success": True,
             "suggestions_count": len(suggestions),
-            "message": "測試成功",
+            "message": "測試成功 (使用 Labs API)",
             "sample_suggestions": suggestions[:5]  # 顯示前 5 個建議
         })
     except Exception as e:

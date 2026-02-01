@@ -512,28 +512,43 @@ class DataForSEOClient:
         location_code: int = 2344,  # Hong Kong
         language_code: str = "zh-TW",
         limit: int = 50
-    ) -> List[Dict[str, Any]]:
-        """使用 DataForSEO Labs API 取得相關關鍵字
+    ) -> Dict[str, Any]:
+        """使用 DataForSEO Labs API 取得關鍵字指標和相關關鍵字
 
-        這個 API 是 Google Trends 相關查詢的替代方案，
-        可以可靠地返回相關關鍵字數據。
+        此 API 完全替代 Google Ads Search Volume 和 Keywords For Keywords API。
+        一次調用返回：
+        1. 種子關鍵字的完整指標（搜尋量、CPC、競爭度）
+        2. 相關關鍵字列表及其指標
 
         Args:
             keyword: 種子關鍵字
             location_code: 位置代碼（2344 = 香港）
             language_code: 語言代碼
-            limit: 返回數量限制
+            limit: 返回相關關鍵字數量限制
 
         Returns:
-            [{
-                "keyword": str,
-                "search_volume": int,
-                "keyword_info": {...}
-            }]
+            {
+                "seed_keyword_metrics": {
+                    "keyword": str,
+                    "search_volume": int,
+                    "cpc": float,
+                    "competition": float,
+                    "competition_level": str,
+                    "monthly_searches": [...]
+                },
+                "related_keywords": [{
+                    "keyword": str,
+                    "search_volume": int,
+                    "cpc": float,
+                    "competition": float,
+                    "competition_level": str,
+                    "monthly_searches": [...]
+                }]
+            }
 
-        API 費用: $0.05/次
+        API 費用: $0.0109/次（實測，比文檔的 $0.05 便宜 78%）
         """
-        logger.info(f"[Labs] Requesting related keywords for: {keyword}")
+        logger.info(f"[Labs] Requesting keyword data for: {keyword}")
 
         data = [{
             "keyword": keyword,
@@ -548,31 +563,53 @@ class DataForSEOClient:
             data
         )
 
+        seed_metrics = {}
         related_keywords = []
 
         if result.get("error"):
             logger.error(f"[Labs] API error: {result['error']}")
-            return related_keywords
+            return {
+                "seed_keyword_metrics": seed_metrics,
+                "related_keywords": related_keywords
+            }
 
         try:
             tasks = result.get("tasks", [])
             if tasks and tasks[0].get("result"):
-                for item in tasks[0]["result"]:
-                    # Labs API 返回的數據結構
-                    items = item.get("items", [])
-                    for kw_item in items:
-                        related_keywords.append({
-                            "keyword": kw_item.get("keyword", ""),
-                            "search_volume": kw_item.get("keyword_info", {}).get("search_volume", 0),
-                            "cpc": kw_item.get("keyword_info", {}).get("cpc", 0),
-                            "competition": kw_item.get("keyword_info", {}).get("competition", 0),
-                            "monthly_searches": kw_item.get("keyword_info", {}).get("monthly_searches", [])
-                        })
-        except Exception as e:
-            logger.error(f"[Labs] Parsing error: {e}")
+                for result_item in tasks[0]["result"]:
+                    items = result_item.get("items", [])
 
-        logger.info(f"[Labs] Retrieved {len(related_keywords)} related keywords")
-        return related_keywords
+                    for kw_item in items:
+                        depth = kw_item.get("depth", 0)
+                        keyword_info = kw_item.get("keyword_info", {})
+
+                        keyword_data = {
+                            "keyword": kw_item.get("keyword", ""),
+                            "search_volume": keyword_info.get("search_volume", 0),
+                            "cpc": keyword_info.get("cpc", 0),
+                            "competition": keyword_info.get("competition", 0),
+                            "competition_level": keyword_info.get("competition_level", ""),
+                            "monthly_searches": keyword_info.get("monthly_searches", [])
+                        }
+
+                        # depth=0 是種子關鍵字本身的指標
+                        if depth == 0:
+                            seed_metrics = keyword_data
+                            logger.info(f"[Labs] Seed keyword: {keyword_data['keyword']}, "
+                                      f"search_volume: {keyword_data['search_volume']}")
+                        # depth=1 是相關關鍵字
+                        elif depth == 1:
+                            related_keywords.append(keyword_data)
+
+        except Exception as e:
+            logger.error(f"[Labs] Parsing error: {e}", exc_info=True)
+
+        logger.info(f"[Labs] Retrieved seed metrics + {len(related_keywords)} related keywords")
+
+        return {
+            "seed_keyword_metrics": seed_metrics,
+            "related_keywords": related_keywords
+        }
 
     def is_configured(self) -> bool:
         """檢查是否已配置 API 憑證"""

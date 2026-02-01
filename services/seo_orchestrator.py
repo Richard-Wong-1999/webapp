@@ -371,7 +371,7 @@ def analyze_keyword_full(keyword: str, skip_scraping: bool = False) -> Dict[str,
         "keyword": keyword,
         "step": "初始化",
         "completed_steps": 0,
-        "total_steps": 4 if not skip_scraping else 3,
+        "total_steps": 3 if not skip_scraping else 2,
         "message": "開始分析...",
         "error": None
     }
@@ -386,76 +386,69 @@ def analyze_keyword_full(keyword: str, skip_scraping: bool = False) -> Dict[str,
     }
 
     try:
-        # Step 1: Google Trends (topics) + DataForSEO Labs (related keywords)
-        update_progress("trends", "正在取得關鍵字趨勢與相關查詢...", 0)
+        # Step 1 & 2: 使用 DataForSEO Labs API 一次性獲取所有關鍵字數據
+        # 這個 API 完全替代了：
+        # - Google Trends 相關查詢
+        # - Google Ads Search Volume API
+        # - Google Ads Keywords For Keywords API
+        update_progress("keyword_data", "正在取得關鍵字完整數據...", 0)
 
-        trends = get_cached_trends(keyword)
-        if not trends:
-            logger.info(f"Fetching trends and related keywords for: {keyword}")
-
-            # 使用 DataForSEO Labs API 取得相關關鍵字（替代 Google Trends 相關查詢）
-            # Labs API 更可靠，可以返回相關關鍵字數據
-            labs_keywords = dataforseo_client.get_related_keywords_labs(keyword, limit=20)
-
-            # 將 Labs 結果格式化為 queries 格式（相容現有代碼）
-            queries = []
-            for i, kw in enumerate(labs_keywords[:20]):
-                queries.append({
-                    "query": kw.get("keyword", ""),
-                    "type": "related",  # 標記為相關關鍵字
-                    "value": kw.get("search_volume", 0)  # 使用搜尋量作為 value
-                })
-
-            # Google Trends API 僅用於取得 topics（如有）
-            # 注意：實際上 Trends API 通常不返回 topics/queries，但保留以防萬一
-            trends_result = dataforseo_client.get_google_trends(keyword)
-            topics = trends_result.get("topics", []) if not trends_result.get("error") else []
-
-            trends = {
-                "topics": topics,
-                "queries": queries  # 使用 Labs API 的相關關鍵字
-            }
-            store_trends_cache(keyword, trends)
-
-        result["trends"] = trends
-        update_progress("trends", "關鍵字趨勢與相關查詢完成", 1)
-
-        # Step 2: Keyword Data (Search Volume, CPC, Competition)
-        update_progress("keyword_data", "正在取得關鍵字指標...", 1)
-
+        # 檢查快取（優先檢查 keyword_data，因為它包含最完整的數據）
         keyword_data = get_cached_keyword_data(keyword)
-        if not keyword_data:
-            logger.info(f"Fetching keyword metrics for: {keyword}")
+        trends = get_cached_trends(keyword)
 
-            # 取得搜尋量等指標
-            metrics = dataforseo_client.get_keyword_metrics([keyword])
-            metric = metrics[0] if metrics else {}
+        if not keyword_data or not trends:
+            logger.info(f"Fetching complete keyword data for: {keyword}")
 
-            # 取得相關關鍵字建議
-            suggestions = dataforseo_client.get_keyword_suggestions(keyword, limit=20)
+            # 調用 Labs API 一次，獲取所有數據
+            labs_data = dataforseo_client.get_related_keywords_labs(keyword, limit=20)
 
+            seed_metrics = labs_data.get("seed_keyword_metrics", {})
+            related = labs_data.get("related_keywords", [])
+
+            # 構建 keyword_data（用於關鍵字指標面板）
             keyword_data = {
-                "search_volume": metric.get("search_volume", 0),
-                "cpc": metric.get("cpc", 0),
-                "competition": metric.get("competition", 0),
-                "competition_level": metric.get("competition_level", ""),
+                "search_volume": seed_metrics.get("search_volume", 0),
+                "cpc": seed_metrics.get("cpc", 0),
+                "competition": seed_metrics.get("competition", 0),
+                "competition_level": seed_metrics.get("competition_level", ""),
                 "related_keywords": [
                     {
-                        "keyword": s.get("keyword", ""),
-                        "search_volume": s.get("search_volume", 0),
-                        "cpc": s.get("cpc", 0),
-                        "competition": s.get("competition", 0)
+                        "keyword": r.get("keyword", ""),
+                        "search_volume": r.get("search_volume", 0),
+                        "cpc": r.get("cpc", 0),
+                        "competition": r.get("competition", 0)
                     }
-                    for s in suggestions[:20]
+                    for r in related[:20]
                 ]
             }
+
+            # 構建 trends（用於相關查詢面板）
+            # 將 Labs 相關關鍵字格式化為 queries 格式
+            queries = [
+                {
+                    "query": r.get("keyword", ""),
+                    "type": "related",
+                    "value": r.get("search_volume", 0)
+                }
+                for r in related[:20]
+            ]
+
+            trends = {
+                "topics": [],  # Labs API 不提供 topics
+                "queries": queries
+            }
+
+            # 存入快取
             store_keyword_cache(keyword, keyword_data)
+            store_trends_cache(keyword, trends)
 
         result["keyword_data"] = keyword_data
-        update_progress("keyword_data", "關鍵字指標完成", 2)
+        result["trends"] = trends
+        update_progress("keyword_data", "關鍵字數據完成", 1)
 
-        # Step 3: SERP Results
-        update_progress("serp", "正在取得搜尋結果...", 2)
+        # Step 2: SERP Results
+        update_progress("serp", "正在取得搜尋結果...", 1)
 
         serp = get_cached_serp(keyword)
         if not serp:
@@ -477,11 +470,11 @@ def analyze_keyword_full(keyword: str, skip_scraping: bool = False) -> Dict[str,
                 }
 
         result["serp"] = serp
-        update_progress("serp", "搜尋結果完成", 3)
+        update_progress("serp", "搜尋結果完成", 2)
 
-        # Step 4: Scrape SERP URLs
+        # Step 3: Scrape SERP URLs
         if not skip_scraping and serp.get("organic_results"):
-            update_progress("scraping", "正在爬取競爭對手網站...", 3)
+            update_progress("scraping", "正在爬取競爭對手網站...", 2)
 
             urls_to_scrape = []
             for item in serp["organic_results"][:5]:  # 只爬前 5 個
@@ -502,7 +495,7 @@ def analyze_keyword_full(keyword: str, skip_scraping: bool = False) -> Dict[str,
                         store_scraped_content(item)
                         result["scraped_content"].append(item)
 
-            update_progress("scraping", "網站爬取完成", 4)
+            update_progress("scraping", "網站爬取完成", 3)
 
         seo_analysis_progress["running"] = False
         seo_analysis_progress["message"] = "分析完成"
