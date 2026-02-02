@@ -17,69 +17,41 @@
       <div class="model-selector-section" style="background: linear-gradient(135deg, #2c4a7a 0%, #1f3a5f 100%);
            border-radius: 8px; padding: 20px; margin-bottom: 20px; color: white;">
 
-        <h3 style="margin: 0 0 15px 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+        <h3 style="margin: 0 0 15px 0; font-size: 16px;">
           🤖 AI 模型設定
-          <span id="modelStatusBadge" style="font-size: 12px; padding: 2px 8px; background: rgba(255,255,255,0.2); border-radius: 4px;"></span>
         </h3>
 
-        <div style="display: flex; gap: 15px; align-items: flex-start; flex-wrap: wrap;">
-          <!-- 模型選擇器 -->
-          <div style="flex: 1; min-width: 200px;">
-            <label style="font-size: 13px; opacity: 0.9; display: block; margin-bottom: 5px;">選擇模型：</label>
-            <select id="modelSelect" onchange="changeModel()"
-                    style="width: 100%; padding: 10px; border-radius: 4px; border: none; font-size: 14px; cursor: pointer;">
-              <optgroup label="DeepSeek（官方 API）">
-                <option value="deepseek:deepseek-chat">DeepSeek Chat</option>
-                <option value="deepseek:deepseek-coder">DeepSeek Coder</option>
-              </optgroup>
-              <optgroup label="Poe - OpenAI">
-                <option value="poe:GPT-4o">GPT-4o</option>
-                <option value="poe:GPT-4o-Mini">GPT-4o Mini（便宜）</option>
-                <option value="poe:GPT-4-Turbo">GPT-4 Turbo</option>
-                <option value="poe:GPT-4">GPT-4</option>
-                <option value="poe:ChatGPT">ChatGPT (GPT-3.5)</option>
-                <option value="poe:o1-mini">o1-mini（推理）</option>
-              </optgroup>
-              <optgroup label="Poe - Claude">
-                <option value="poe:Claude-3.5-Sonnet">Claude 3.5 Sonnet</option>
-                <option value="poe:Claude-3.5-Haiku">Claude 3.5 Haiku（快速）</option>
-                <option value="poe:Claude-3-Opus">Claude 3 Opus（最強）</option>
-                <option value="poe:Claude-3-Sonnet">Claude 3 Sonnet</option>
-                <option value="poe:Claude-3-Haiku">Claude 3 Haiku</option>
-              </optgroup>
-              <optgroup label="Poe - Google Gemini">
-                <option value="poe:Gemini-2.0-Flash">Gemini 2.0 Flash</option>
-                <option value="poe:Gemini-1.5-Pro">Gemini 1.5 Pro</option>
-                <option value="poe:Gemini-1.5-Flash">Gemini 1.5 Flash（便宜）</option>
-              </optgroup>
-              <optgroup label="Poe - 其他模型">
-                <option value="poe:Llama-3.3-70B">Llama 3.3 70B</option>
-                <option value="poe:Llama-3.1-405B">Llama 3.1 405B</option>
-                <option value="poe:Mistral-Large">Mistral Large</option>
-                <option value="poe:Qwen-2.5-Coder-32B">Qwen 2.5 Coder 32B</option>
-              </optgroup>
-            </select>
-          </div>
-
-          <!-- 費用顯示（僅 Poe） -->
-          <div id="poeUsageInfo" style="display: none; text-align: center; padding: 15px 20px;
-               background: rgba(255,255,255,0.1); border-radius: 4px; min-width: 120px;">
-            <div style="font-size: 24px; font-weight: bold;" id="pointsUsed">0</div>
-            <div style="font-size: 11px; opacity: 0.8;">已用點數</div>
-            <div style="font-size: 10px; opacity: 0.6; margin-top: 2px;">（本次 Session）</div>
-          </div>
+        <div style="flex: 1; min-width: 200px;">
+          <label style="font-size: 13px; opacity: 0.9; display: block; margin-bottom: 5px;">選擇模型：</label>
+          <select id="modelSelect" onchange="changeModel()"
+                  style="width: 100%; padding: 10px; border-radius: 4px; border: none; font-size: 14px; cursor: pointer;">
+            <optgroup label="Poe - OpenAI GPT">
+              <option value="poe:gpt-5.2">GPT-5.2 — 最新旗艦，能力最強</option>
+              <option value="poe:gpt-5-mini">GPT-5 Mini — 輕量版 GPT-5，快速便宜</option>
+              <option value="poe:gpt-4.1">GPT-4.1 — 穩定可靠，廣泛應用</option>
+              <option value="poe:gpt-4.1-mini">GPT-4.1 Mini — 輕量快速，適合簡單任務</option>
+              <option value="poe:o4-mini">o4-mini — 推理模型，擅長邏輯分析</option>
+            </optgroup>
+            <optgroup label="Poe - Google Gemini">
+              <option value="poe:gemini-3-pro">Gemini 3 Pro — Google 旗艦，多模態強</option>
+              <option value="poe:gemini-3-flash">Gemini 3 Flash — 快速便宜，日常首選</option>
+            </optgroup>
+            <optgroup label="DeepSeek（官方 API - 最便宜）">
+              <option value="deepseek:deepseek-chat">DeepSeek Chat — 通用對話，性價比極高</option>
+            </optgroup>
+          </select>
         </div>
 
         <!-- 價格參考連結 -->
         <div style="margin-top: 12px; font-size: 12px; display: flex; gap: 15px; flex-wrap: wrap;">
-          <a href="https://poe.com/api/models" target="_blank"
+          <a href="https://poe.com/api_pricing" target="_blank"
              style="color: rgba(255,255,255,0.9); text-decoration: underline;">
-            📋 查看 Poe API 模型價格表
+            📋 Poe API 價格表
           </a>
           <span style="opacity: 0.7;">|</span>
-          <a href="https://platform.deepseek.com/usage" target="_blank"
+          <a href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing/" target="_blank"
              style="color: rgba(255,255,255,0.9); text-decoration: underline;">
-            📊 DeepSeek 用量查詢
+            📊 DeepSeek 價格表
           </a>
         </div>
       </div>
@@ -262,44 +234,13 @@
 
         const data = await res.json();
 
-        if (data.success) {
-          // 更新狀態徽章
-          updateModelStatusBadge(provider, model);
-
-          // 顯示/隱藏 Poe 費用資訊
-          const poeInfo = document.getElementById('poeUsageInfo');
-          if (provider === 'poe') {
-            poeInfo.style.display = 'block';
-            updatePoeUsage();
-          } else {
-            poeInfo.style.display = 'none';
-          }
-        } else {
+        if (!data.success) {
           console.error('Failed to set model:', data.message);
           alert('切換模型失敗: ' + data.message);
         }
       } catch (e) {
         console.error('Error changing model:', e);
         alert('切換模型時發生錯誤');
-      }
-    }
-
-    async function updatePoeUsage() {
-      try {
-        const res = await fetch('/api/poe_usage');
-        const data = await res.json();
-        document.getElementById('pointsUsed').textContent = (data.points_used || 0).toLocaleString();
-      } catch (e) {
-        console.warn('Failed to update Poe usage:', e);
-      }
-    }
-
-    function updateModelStatusBadge(provider, model) {
-      const badge = document.getElementById('modelStatusBadge');
-      if (badge) {
-        const providerName = provider === 'deepseek' ? 'DeepSeek' : 'Poe';
-        badge.textContent = `${providerName}`;
-        badge.style.background = provider === 'deepseek' ? 'rgba(76, 175, 80, 0.3)' : 'rgba(255, 152, 0, 0.3)';
       }
     }
 
@@ -313,20 +254,10 @@
 
         // 設定下拉選單值
         if (select) {
-          // 檢查選項是否存在
           const optionExists = Array.from(select.options).some(opt => opt.value === value);
           if (optionExists) {
             select.value = value;
           }
-        }
-
-        // 更新狀態徽章
-        updateModelStatusBadge(data.provider, data.model);
-
-        // 顯示費用（如果是 Poe）
-        if (data.provider === 'poe') {
-          document.getElementById('poeUsageInfo').style.display = 'block';
-          updatePoeUsage();
         }
       } catch (e) {
         console.warn('Failed to load current model:', e);

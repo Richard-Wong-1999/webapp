@@ -34,8 +34,7 @@ class Config:
             "api_url": "https://api.deepseek.com/chat/completions",
             "api_key_env": "DEEPSEEK_API_KEY",
             "models": {
-                "deepseek-chat": {"name": "DeepSeek Chat", "has_thinking": False},
-                "deepseek-coder": {"name": "DeepSeek Coder", "has_thinking": False}
+                "deepseek-chat": {"name": "DeepSeek Chat", "desc": "通用對話，性價比極高", "has_thinking": False}
             }
         },
         "poe": {
@@ -43,33 +42,13 @@ class Config:
             "api_url": "https://api.poe.com/bot/",
             "api_key_env": "POE_API_KEY",
             "models": {
-                # OpenAI 系列
-                "GPT-4o": {"name": "GPT-4o", "has_thinking": False},
-                "GPT-4o-Mini": {"name": "GPT-4o Mini", "has_thinking": False},
-                "GPT-4-Turbo": {"name": "GPT-4 Turbo", "has_thinking": False},
-                "GPT-4": {"name": "GPT-4", "has_thinking": False},
-                "ChatGPT": {"name": "ChatGPT (GPT-3.5)", "has_thinking": False},
-                "o1-mini": {"name": "o1-mini", "has_thinking": True},
-                # Anthropic Claude 系列
-                "Claude-3.5-Sonnet": {"name": "Claude 3.5 Sonnet", "has_thinking": False},
-                "Claude-3.5-Haiku": {"name": "Claude 3.5 Haiku", "has_thinking": False},
-                "Claude-3-Opus": {"name": "Claude 3 Opus", "has_thinking": False},
-                "Claude-3-Sonnet": {"name": "Claude 3 Sonnet", "has_thinking": False},
-                "Claude-3-Haiku": {"name": "Claude 3 Haiku", "has_thinking": False},
-                # Google Gemini 系列
-                "Gemini-2.0-Flash": {"name": "Gemini 2.0 Flash", "has_thinking": False},
-                "Gemini-1.5-Pro": {"name": "Gemini 1.5 Pro", "has_thinking": False},
-                "Gemini-1.5-Flash": {"name": "Gemini 1.5 Flash", "has_thinking": False},
-                # Meta Llama 系列
-                "Llama-3.1-405B": {"name": "Llama 3.1 405B", "has_thinking": False},
-                "Llama-3.1-70B": {"name": "Llama 3.1 70B", "has_thinking": False},
-                "Llama-3.3-70B": {"name": "Llama 3.3 70B", "has_thinking": False},
-                # Mistral 系列
-                "Mistral-Large": {"name": "Mistral Large", "has_thinking": False},
-                "Mistral-Medium": {"name": "Mistral Medium", "has_thinking": False},
-                # 其他
-                "DALL-E-3": {"name": "DALL-E 3 (圖片)", "has_thinking": False},
-                "Qwen-2.5-Coder-32B": {"name": "Qwen 2.5 Coder 32B", "has_thinking": False}
+                "gpt-5.2": {"name": "GPT-5.2", "desc": "最新旗艦，能力最強", "has_thinking": False},
+                "gpt-5-mini": {"name": "GPT-5 Mini", "desc": "輕量版 GPT-5，快速便宜", "has_thinking": False},
+                "gpt-4.1": {"name": "GPT-4.1", "desc": "穩定可靠，廣泛應用", "has_thinking": False},
+                "gpt-4.1-mini": {"name": "GPT-4.1 Mini", "desc": "輕量快速，適合簡單任務", "has_thinking": False},
+                "o4-mini": {"name": "o4-mini", "desc": "推理模型，擅長邏輯分析", "has_thinking": True},
+                "gemini-3-pro": {"name": "Gemini 3 Pro", "desc": "Google 旗艦，多模態強", "has_thinking": False},
+                "gemini-3-flash": {"name": "Gemini 3 Flash", "desc": "快速便宜，日常首選", "has_thinking": False}
             }
         }
     }
