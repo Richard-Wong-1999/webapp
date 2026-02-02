@@ -607,6 +607,9 @@ def background_generate_articles(
                     cleaned_output = cleaned_output.strip()
                     logger.info(f"🧹 第 {idx+1} 篇已移除 markdown 標記")
 
+            # 修復 JSON 尾隨逗號問題
+            cleaned_output = re.sub(r',(\s*[}\]])', r'\1', cleaned_output)
+
             match = re.search(r'\[.*\]', cleaned_output, re.S)
             parsed = json.loads(match.group(0)) if match else json.loads(cleaned_output)
 
@@ -824,6 +827,10 @@ def background_generate_articles_by_source(
                     cleaned_output = re.sub(r'```', '', cleaned_output)
                     cleaned_output = cleaned_output.strip()
                     logger.info(f"🧹 第 {idx+1} 篇已移除 markdown 標記")
+
+            # 修復 JSON 尾隨逗號問題（LLM 常見錯誤）
+            # 移除 }, 或 ], 後面緊跟 } 或 ] 的情況
+            cleaned_output = re.sub(r',(\s*[}\]])', r'\1', cleaned_output)
 
             # 嘗試多種 JSON 匹配模式
             match = re.search(r'\[.*\]', cleaned_output, re.S)

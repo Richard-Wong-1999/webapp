@@ -348,6 +348,125 @@
     // SEO 關鍵字研究
     // ============================================================
     let seoResearching = false;
+    const SEO_STORAGE_KEY = 'seo_research_cache';
+
+    // 儲存 SEO 研究結果到 localStorage
+    function saveSeoResultsToStorage(keyword, data) {
+      try {
+        const cache = {
+          keyword: keyword,
+          metrics: data.metrics,
+          suggestions: data.suggestions,
+          timestamp: Date.now()
+        };
+        localStorage.setItem(SEO_STORAGE_KEY, JSON.stringify(cache));
+        console.log('[SEO] 已儲存研究結果到 localStorage:', keyword);
+      } catch (e) {
+        console.warn('[SEO] 無法儲存到 localStorage:', e);
+      }
+    }
+
+    // 從 localStorage 恢復 SEO 研究結果
+    function restoreSeoResultsFromStorage() {
+      try {
+        const cached = localStorage.getItem(SEO_STORAGE_KEY);
+        if (!cached) return false;
+
+        const data = JSON.parse(cached);
+
+        // 檢查快取是否過期（24小時）
+        const maxAge = 24 * 60 * 60 * 1000;
+        if (Date.now() - data.timestamp > maxAge) {
+          localStorage.removeItem(SEO_STORAGE_KEY);
+          console.log('[SEO] 快取已過期，已清除');
+          return false;
+        }
+
+        console.log('[SEO] 從 localStorage 恢復研究結果:', data.keyword);
+
+        // 恢復輸入框的關鍵字
+        const input = document.getElementById('seoKeywordInput');
+        if (input) input.value = data.keyword;
+
+        // 顯示結果區域
+        const resultsEl = document.getElementById('seoResearchResults');
+        if (resultsEl) resultsEl.classList.add('active');
+
+        // 恢復基本指標
+        document.getElementById('metricVolume').textContent =
+          (data.metrics.search_volume || 0).toLocaleString();
+        document.getElementById('metricCPC').textContent =
+          '$' + (data.metrics.cpc || 0).toFixed(2);
+        document.getElementById('metricCompetition').textContent =
+          data.metrics.competition_level || 'N/A';
+        document.getElementById('metricDifficulty').textContent =
+          data.metrics.keyword_difficulty !== undefined ? data.metrics.keyword_difficulty : '-';
+
+        // 恢復詳細指標
+        const detailEl = document.getElementById('metricsDetail');
+        if (data.metrics.search_intent || data.metrics.serp_count || data.metrics.search_volume_trend) {
+          detailEl.style.display = 'block';
+
+          document.getElementById('metricIntent').textContent =
+            data.metrics.search_intent || '-';
+          document.getElementById('metricSerpCount').textContent =
+            data.metrics.serp_count ? data.metrics.serp_count.toLocaleString() : '-';
+
+          const trend = data.metrics.search_volume_trend || {};
+          const formatTrend = (v) => v !== undefined ? (v >= 0 ? `+${v}%` : `${v}%`) : '-';
+          document.getElementById('metricTrendMonthly').textContent = formatTrend(trend.monthly);
+          document.getElementById('metricTrendQuarterly').textContent = formatTrend(trend.quarterly);
+          document.getElementById('metricTrendYearly').textContent = formatTrend(trend.yearly);
+
+          document.getElementById('metricBacklinks').textContent =
+            data.metrics.avg_backlinks !== undefined ? Math.round(data.metrics.avg_backlinks) : '-';
+
+          const serpTypes = data.metrics.serp_item_types || [];
+          document.getElementById('metricSerpTypes').textContent =
+            serpTypes.length > 0 ? serpTypes.join(', ') : '-';
+        } else {
+          detailEl.style.display = 'none';
+        }
+
+        // 恢復建議關鍵字
+        const suggestionsEl = document.getElementById('suggestionsList');
+        const suggestions = (data.suggestions || []).slice(0, 20);
+        suggestionsEl.innerHTML = suggestions.map(s => {
+          const difficultyBadge = s.keyword_difficulty !== undefined
+            ? `<span class="seo-badge difficulty">難度: ${s.keyword_difficulty}</span>`
+            : '';
+          const intentBadge = s.search_intent
+            ? `<span class="seo-badge intent">${s.search_intent}</span>`
+            : '';
+          return `
+            <div class="seo-suggestion-item" onclick="addSuggestionToList('${escapeHtml(s.keyword)}')">
+              <span class="seo-suggestion-keyword">${escapeHtml(s.keyword)}</span>
+              <span class="seo-suggestion-metrics">
+                <span>搜尋量: ${(s.search_volume || 0).toLocaleString()}</span>
+                <span>CPC: $${(s.cpc || 0).toFixed(2)}</span>
+                ${difficultyBadge}
+                ${intentBadge}
+              </span>
+            </div>
+          `;
+        }).join('');
+
+        // 儲存建議關鍵字的指標
+        window.seoSuggestionMetrics = {};
+        suggestions.forEach(s => {
+          window.seoSuggestionMetrics[s.keyword] = s;
+        });
+
+        // 恢復趨勢圖表
+        let monthlySearches = data.suggestions?.[0]?.monthly_searches || [];
+        renderTrendChart(monthlySearches, data.metrics.search_volume_trend);
+
+        return true;
+      } catch (e) {
+        console.warn('[SEO] 無法從 localStorage 恢復:', e);
+        return false;
+      }
+    }
 
     async function researchKeyword() {
       if (seoResearching || !seoApiConfigured) return;
@@ -457,6 +576,9 @@
         // 渲染趨勢圖表
         let monthlySearches = data.suggestions?.[0]?.monthly_searches || [];
         renderTrendChart(monthlySearches, data.metrics.search_volume_trend);
+
+        // 儲存結果到 localStorage
+        saveSeoResultsToStorage(keyword, data);
 
       } catch (e) {
         console.error('Research error:', e);
@@ -887,6 +1009,11 @@
 
       // 檢查 SEO API 狀態
       await checkSeoApiStatus();
+
+      // 恢復上次的 SEO 研究結果（如果有）
+      if (seoApiConfigured) {
+        restoreSeoResultsFromStorage();
+      }
 
       // 載入所有關鍵字（SWD + HA）
       await loadAllKeywords();
