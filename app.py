@@ -703,10 +703,13 @@ def api_debug_test_poe():
     from services.poe_client import call_poe
     from config import Config
 
+    # 從 query string 取得要測試的模型，預設 o4-mini
+    test_model = request.args.get("model", "o4-mini")
+
     result = {
         "poe_api_key_set": bool(Config.POE_API_KEY),
         "poe_api_url": Config.POE_API_URL,
-        "test_model": "gpt-4.1-mini",
+        "test_model": test_model,
         "success": False,
         "response": None,
         "error": None
@@ -717,7 +720,7 @@ def api_debug_test_poe():
         return jsonify(result)
 
     try:
-        content, tokens = call_poe("Say 'Hello' in one word.", model="gpt-4.1-mini")
+        content, tokens = call_poe("Say 'Hello' in one word.", model=test_model)
         if content:
             result["success"] = True
             result["response"] = content[:100]
