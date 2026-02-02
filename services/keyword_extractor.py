@@ -9,6 +9,7 @@ from config import Config
 from utils.logger import logger
 from utils.cache_manager import cache_manager
 from services.deepseek_client import call_deepseek
+from services.llm_client import call_llm
 
 
 def clear_article_cache(source: str = None):
@@ -93,7 +94,7 @@ def store_keywords(source: str, keywords: List[str], error: str = ""):
 
 
 def extract_keywords_from_deepseek(summaries: List[str]) -> List[str]:
-    """使用 DeepSeek 提取關鍵字
+    """使用 GPT-5.2 提取關鍵字
 
     Args:
         summaries: 文章摘要列表
@@ -132,9 +133,12 @@ def extract_keywords_from_deepseek(summaries: List[str]) -> List[str]:
         "請輸出20個關鍵詞（按長者相關程度排序）："
     )
 
-    output = call_deepseek(prompt)
+    # 使用 GPT-5.2 進行關鍵字提取
+    output, metadata = call_llm(prompt, provider="poe", model="gpt-5.2")
+    logger.info(f"🤖 關鍵字提取使用模型: {metadata.get('provider')}/{metadata.get('model')}")
+
     if not output:
-        logger.warning("⚠️ DeepSeek 無回應或 API 失敗，返回空關鍵字列表")
+        logger.warning("⚠️ GPT-5.2 無回應或 API 失敗，返回空關鍵字列表")
         return []
 
     keywords = [kw.strip() for kw in output.replace("，", ",").split(",") if kw.strip()]
