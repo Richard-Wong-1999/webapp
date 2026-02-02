@@ -87,11 +87,12 @@
 
         if(data.total > 0){
           const percent = Math.round((data.completed / data.total) * 100);
+          const container = document.querySelector('.progress-container');
           txt.innerText = data.running ?
             `第 ${data.completed} / ${data.total} 篇完成` :
             `✅ 全部完成，共 ${data.total} 篇`;
           bar.style.width = percent + "%";
-          bar.innerText = percent + "%";
+          container.setAttribute('data-percent', percent + "%");
           list.innerHTML = (data.titles || []).map(t => `<li>📝 ${escapeHtml(String(t))}</li>`).join('');
         }
 

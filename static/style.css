@@ -87,13 +87,14 @@ button:disabled,
   cursor: not-allowed;
 }
 
-/* 次要按鈕 */
+/* 統一按鈕顏色：全部使用 gov-primary */
 .btn-secondary {
-  background: #6b7c93;
+  background: var(--gov-primary);
+  color: #fff;
 }
 
 .btn-secondary:hover {
-  background: #5a6a7f;
+  background: #162c49;
 }
 
 /* Primary - 主要操作按鈕 */
@@ -105,31 +106,31 @@ button:disabled,
   background: #162c49;
 }
 
-/* Info - 查看/詳情操作 */
+/* Info - 查看/詳情操作（統一為 gov-primary） */
 .btn-info {
-  background: var(--gov-accent);
+  background: var(--gov-primary);
   color: #fff;
 }
 .btn-info:hover:not(:disabled) {
-  background: #1f5a99;
+  background: #162c49;
 }
 
-/* Warning - 警告操作 */
+/* Warning - 警告操作（統一為 gov-primary） */
 .btn-warning {
-  background: #d68910;
+  background: var(--gov-primary);
   color: #fff;
 }
 .btn-warning:hover:not(:disabled) {
-  background: #b7780d;
+  background: #162c49;
 }
 
-/* Danger - 危險操作 */
+/* Danger - 危險操作（統一為 gov-primary） */
 .btn-danger {
-  background: #c0392b;
+  background: var(--gov-primary);
   color: #fff;
 }
 .btn-danger:hover:not(:disabled) {
-  background: #a33025;
+  background: #162c49;
 }
 
 /* ==========================================================
@@ -190,6 +191,11 @@ input[type="checkbox"] {
   height: 10px;
   border-radius: 5px;
   margin-top: 12px;
+  overflow: hidden;  /* 確保子元素不超出圓角 */
+}
+
+.progress-bar-container .progress-bar {
+  border-radius: 5px;  /* 與容器相同的圓角 */
 }
 
 .progress-bar {
@@ -206,6 +212,31 @@ input[type="checkbox"] {
   height: 28px;
   border-radius: 14px;
   margin: 16px 0;
+  overflow: hidden;  /* 確保子元素不超出圓角 */
+  position: relative;  /* 讓百分比文字可以絕對定位 */
+}
+
+.progress-container .progress-bar {
+  border-radius: 14px;  /* 與容器相同的圓角 */
+  height: 100%;
+}
+
+/* 百分比文字置於進度條中央（覆蓋整個容器） */
+.progress-container::after {
+  content: attr(data-percent);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  pointer-events: none;
 }
 
 .progress-bar {
@@ -304,7 +335,7 @@ input[type="checkbox"] {
 }
 
 .toggle-btn {
-  background: var(--gov-accent);
+  background: var(--gov-primary);  /* 統一為 gov-primary */
   color: white;
   border: none;
   padding: 8px 16px;
@@ -314,7 +345,7 @@ input[type="checkbox"] {
 }
 
 .toggle-btn:hover {
-  background: #1f5a99;
+  background: #162c49;  /* 統一 hover 色 */
 }
 
 .prompt-content {

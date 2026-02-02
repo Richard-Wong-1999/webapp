@@ -76,7 +76,7 @@
               </div>
               <div style="margin-top: 10px;">
                 <strong>SERP 項目類型：</strong>
-                <span id="metricSerpTypes" style="font-size: 12px; color: #666;">-</span>
+                <span id="metricSerpTypes" style="font-size: 12px; color: rgba(255,255,255,0.9);">-</span>
               </div>
             </div>
           </div>
@@ -92,7 +92,7 @@
           <!-- 相關關鍵字面板（合併顯示） -->
           <div class="seo-panel" id="suggestionsPanel">
             <h4>💡 相關關鍵字建議 <small>(點擊可加入生成清單)</small></h4>
-            <p style="font-size: 12px; color: #666; margin: 5px 0 10px 0;">
+            <p style="font-size: 12px; color: rgba(255,255,255,0.8); margin: 5px 0 10px 0;">
               點擊任一關鍵字將自動加入生成清單，並使用 <strong>SERP 爬蟲</strong> 作為參考資料
             </p>
             <div id="suggestionsList"></div>
@@ -222,7 +222,17 @@
 
       if (trendChartInstance) trendChartInstance.destroy();
 
-      const sorted = [...monthlySearches].sort((a, b) =>
+      // 計算 12 個月前的日期
+      const now = new Date();
+      const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+      // 過濾只保留最近 12 個月的資料
+      const filtered = monthlySearches.filter(d => {
+        const itemDate = new Date(d.year, d.month - 1, 1);
+        return itemDate >= twelveMonthsAgo;
+      });
+
+      const sorted = [...filtered].sort((a, b) =>
         new Date(a.year, a.month - 1) - new Date(b.year, b.month - 1)
       );
 
