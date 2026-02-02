@@ -17,8 +17,6 @@
         <h2>🔍 SEO 關鍵字研究</h2>
         <div id="seoNotConfigured" class="seo-not-configured" style="display:none;">
           DataForSEO API 未配置。請在 .env 檔案中設定 DATAFORSEO_LOGIN 和 DATAFORSEO_PASSWORD。
-          <br>
-          <a href="/debug/seo" style="color: #004085; text-decoration: underline;">🔧 前往診斷頁面</a>
         </div>
         <div class="seo-input-row">
           <input type="text" id="seoKeywordInput" placeholder="輸入種子關鍵字進行 SEO 分析...">
@@ -165,58 +163,6 @@
       </p>
     </div>
 
-    <!-- 右區：SEO 工具說明 -->
-    <div class="right-panel">
-      <h2>📊 SEO 關鍵字工具</h2>
-
-      <div style="padding: 20px; background: #f8f9fa; border-radius: 8px;">
-        <h3 style="margin-top: 0;">💡 使用說明</h3>
-
-        <p><strong>🔍 SEO 關鍵字研究</strong></p>
-        <ul style="line-height: 1.8;">
-          <li>分析關鍵字的搜尋量、CPC、競爭程度</li>
-          <li>查看相關關鍵字（DataForSEO Labs API）</li>
-          <li>獲取關鍵字建議（Google Ads API）</li>
-          <li><strong>點擊相關關鍵字或建議關鍵字可加入生成清單</strong></li>
-        </ul>
-
-        <p><strong>📝 文章生成</strong></p>
-        <ul style="line-height: 1.8;">
-          <li><strong>🔵 SWD 關鍵字</strong>：使用社會福利署新聞稿作為參考</li>
-          <li><strong>🟠 HA 關鍵字</strong>：使用醫院管理局新聞稿作為參考</li>
-          <li><strong>🟢 SEO 關鍵字</strong>：自動進行 SERP 爬蟲，使用搜尋引擎結果作為參考</li>
-        </ul>
-
-        <p style="padding: 10px; background: #fff3cd; border-left: 3px solid #ffc107; font-size: 13px; margin-top: 10px;">
-          <strong>💡 提示：</strong> SEO 來源的關鍵字會自動爬取 Google 搜尋結果的前 5 個網站內容，作為文章生成的參考資料。
-        </p>
-
-        <hr style="margin: 20px 0; opacity: 0.3;">
-
-        <h3>🔧 系統狀態</h3>
-        <div style="margin-bottom: 10px;">
-          <span style="color: #28a745; font-weight: bold;">✅</span>
-          DataForSEO API 已配置
-        </div>
-        <a href="/debug/seo" style="color: var(--gov-accent); text-decoration: underline;">
-          🔍 查看診斷詳情
-        </a>
-
-        <hr style="margin: 20px 0; opacity: 0.3;">
-
-        <h3>💡 建議關鍵字</h3>
-        <p style="font-size: 13px; color: #666;">
-          在 SEO 關鍵字研究中嘗試以下關鍵字以獲得最佳效果：
-        </p>
-        <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;">
-          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">長者</span>
-          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">健康</span>
-          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">護理</span>
-          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">醫療服務</span>
-          <span style="padding: 4px 10px; background: #e3f2fd; border-radius: 12px; font-size: 12px;">安老院</span>
-        </div>
-      </div>
-    </div>
   </div>
 
   <script>
