@@ -697,6 +697,39 @@ def api_poe_usage():
     })
 
 
+@app.route("/api/debug/test_poe", methods=["GET"])
+def api_debug_test_poe():
+    """測試 Poe API 連接（除錯用）"""
+    from services.poe_client import call_poe
+    from config import Config
+
+    result = {
+        "poe_api_key_set": bool(Config.POE_API_KEY),
+        "poe_api_url": Config.POE_API_URL,
+        "test_model": "gpt-4.1-mini",
+        "success": False,
+        "response": None,
+        "error": None
+    }
+
+    if not Config.POE_API_KEY:
+        result["error"] = "POE_API_KEY 未設定"
+        return jsonify(result)
+
+    try:
+        content, tokens = call_poe("Say 'Hello' in one word.", model="gpt-4.1-mini")
+        if content:
+            result["success"] = True
+            result["response"] = content[:100]
+            result["tokens_used"] = tokens
+        else:
+            result["error"] = "API 返回空內容"
+    except Exception as e:
+        result["error"] = str(e)
+
+    return jsonify(result)
+
+
 @app.route("/api/debug/db_status", methods=["GET"])
 def api_debug_db_status():
     """檢查資料庫狀態（除錯用）"""
