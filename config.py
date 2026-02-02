@@ -46,7 +46,6 @@ class Config:
                 "gpt-5-mini": {"name": "GPT-5 Mini", "desc": "輕量版 GPT-5，快速便宜", "has_thinking": False},
                 "gpt-4.1": {"name": "GPT-4.1", "desc": "穩定可靠，廣泛應用", "has_thinking": False},
                 "gpt-4.1-mini": {"name": "GPT-4.1 Mini", "desc": "輕量快速，適合簡單任務", "has_thinking": False},
-                "o4-mini": {"name": "o4-mini", "desc": "推理模型，擅長邏輯分析", "has_thinking": True},
                 "gemini-3-pro": {"name": "Gemini 3 Pro", "desc": "Google 旗艦，多模態強", "has_thinking": False},
                 "gemini-3-flash": {"name": "Gemini 3 Flash", "desc": "快速便宜，日常首選", "has_thinking": False}
             }
