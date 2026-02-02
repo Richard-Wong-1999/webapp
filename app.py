@@ -375,6 +375,28 @@ def get_prompts():
     })
 
 
+@app.route("/diagnostics")
+def diagnostics():
+    """查詢文章生成診斷信息（用於排查問題）"""
+    progress_data = article_generation_progress.to_dict()
+
+    return jsonify({
+        "timestamp": progress_data.get("timestamp", ""),
+        "total_requested": progress_data.get("total", 0),
+        "successfully_saved": len(progress_data.get("titles", [])),
+        "failed_keywords": progress_data.get("failed_keywords", []),
+        "parse_failures": progress_data.get("parse_failures", []),
+        "errors": progress_data.get("errors", []),
+        "tokens_used": progress_data.get("tokens_used", 0),
+        "is_running": progress_data.get("running", False),
+        "summary": {
+            "parse_failure_count": len(progress_data.get("parse_failures", [])),
+            "error_count": len(progress_data.get("errors", [])),
+            "success_rate": f"{len(progress_data.get('titles', [])) / max(progress_data.get('total', 1), 1) * 100:.1f}%"
+        }
+    })
+
+
 # ==========================================================
 # 路由：文章管理
 # ==========================================================

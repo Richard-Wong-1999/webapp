@@ -43,7 +43,20 @@
       <div class="progress-container" data-percent="0%">
         <div id='progress-bar' class="progress-bar"></div>
       </div>
+      <p id='tokens-info' style="display: none; color: #666; font-size: 13px;"></p>
       <ul id='title-list'></ul>
+    </div>
+
+    <!-- 診斷信息區域 -->
+    <div id="diagnostics-section" style="display: none; margin-top: 20px;">
+      <h4 style="color: #dc3545;">⚠️ 診斷信息（以下關鍵字生成失敗）</h4>
+      <div id="failed-keywords" style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+        <ul id="failed-list" style="margin: 0; padding-left: 20px;"></ul>
+      </div>
+      <div id="parse-failures" style="display: none; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 8px; padding: 12px;">
+        <p style="margin: 0 0 8px 0; font-weight: bold;">📋 JSON 解析失敗詳情：</p>
+        <div id="parse-details"></div>
+      </div>
     </div>
 
     <div class="buttons">
@@ -80,6 +93,7 @@
       const txt = document.getElementById('progress-text');
       const bar = document.getElementById('progress-bar');
       const list = document.getElementById('title-list');
+      const tokensInfo = document.getElementById('tokens-info');
 
       await pollWithBackoff(async () => {
         const res = await fetch('/progress');
@@ -88,22 +102,82 @@
         if(data.total > 0){
           const percent = Math.round((data.completed / data.total) * 100);
           const container = document.querySelector('.progress-container');
+          const savedCount = (data.titles || []).length;
           txt.innerText = data.running ?
             `第 ${data.completed} / ${data.total} 篇完成` :
-            `✅ 全部完成，共 ${data.total} 篇`;
+            `✅ 全部完成，成功儲存 ${savedCount} / ${data.total} 篇`;
           bar.style.width = percent + "%";
           container.setAttribute('data-percent', percent + "%");
           list.innerHTML = (data.titles || []).map(t => `<li>📝 ${escapeHtml(String(t))}</li>`).join('');
+
+          // 顯示 tokens 使用量
+          if (data.tokens_used && data.tokens_used > 0) {
+            tokensInfo.style.display = 'block';
+            tokensInfo.innerText = `📊 Tokens 使用量：${data.tokens_used.toLocaleString()}`;
+          }
         }
 
-        // ✅ 當生成完成後加載 Prompts
+        // ✅ 當生成完成後加載 Prompts 和診斷信息
         if(!data.running && !promptsLoaded) {
           promptsLoaded = true;
           loadPrompts();
+          showDiagnostics(data);
         }
 
         return data.running;  // 返回是否繼續輪詢
       });
+    }
+
+    // ✅ 顯示診斷信息
+    function showDiagnostics(data) {
+      const failedKeywords = data.failed_keywords || [];
+      const parseFailures = data.parse_failures || [];
+      const errors = data.errors || [];
+
+      if (failedKeywords.length === 0 && parseFailures.length === 0 && errors.length === 0) {
+        return;  // 沒有錯誤，不顯示診斷區域
+      }
+
+      const section = document.getElementById('diagnostics-section');
+      const failedList = document.getElementById('failed-list');
+      const parseDetails = document.getElementById('parse-details');
+      const parseSection = document.getElementById('parse-failures');
+
+      // 顯示失敗的關鍵字
+      if (failedKeywords.length > 0) {
+        failedList.innerHTML = failedKeywords.map(kw =>
+          `<li style="margin-bottom: 4px;">${escapeHtml(String(kw))}</li>`
+        ).join('');
+        section.style.display = 'block';
+      }
+
+      // 顯示 JSON 解析失敗詳情
+      if (parseFailures.length > 0) {
+        let html = '';
+        parseFailures.forEach((failure, idx) => {
+          html += `
+            <div style="margin-bottom: 12px; padding: 8px; background: #fff; border-radius: 4px;">
+              <p style="margin: 0 0 4px 0;"><strong>關鍵字:</strong> ${escapeHtml(String(failure.keyword || '未知'))}</p>
+              <p style="margin: 0 0 4px 0;"><strong>錯誤:</strong> ${escapeHtml(String(failure.error || '未知錯誤'))}</p>
+              <details>
+                <summary style="cursor: pointer; color: #666;">查看原始輸出 (前 500 字)</summary>
+                <pre style="background: #f8f9fa; padding: 8px; border-radius: 4px; font-size: 12px; max-height: 200px; overflow: auto;">${escapeHtml(String(failure.raw_output || ''))}</pre>
+              </details>
+            </div>
+          `;
+        });
+        parseDetails.innerHTML = html;
+        parseSection.style.display = 'block';
+        section.style.display = 'block';
+      }
+
+      // 顯示其他錯誤
+      if (errors.length > 0 && failedKeywords.length === 0) {
+        failedList.innerHTML = errors.map(err =>
+          `<li style="margin-bottom: 4px;">${escapeHtml(String(err))}</li>`
+        ).join('');
+        section.style.display = 'block';
+      }
     }
 
     // ✅ 加載 Prompts（支援 prompt = {zh} 或舊版 prompt = "..."）

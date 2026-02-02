@@ -520,7 +520,7 @@ def background_generate_articles(
     timestamp: str,
     source: str = "swd"
 ):
-    """背景生成文章
+    """背景生成文章（舊版本，建議使用 background_generate_articles_by_source）
 
     Args:
         selected_keywords: 選中的關鍵詞列表
@@ -529,7 +529,8 @@ def background_generate_articles(
     """
     total_articles = len(selected_keywords)
 
-    # 初始化進度
+    # 初始化進度（包含診斷欄位重置）
+    article_generation_progress.reset()
     article_generation_progress.update(
         total=total_articles,
         completed=0,
@@ -582,6 +583,14 @@ def background_generate_articles(
     # 解析並儲存文章
     all_articles = []
     for idx, output_text, chosen_kws in sorted(results, key=lambda x: x[0]):
+        # 診斷：記錄關鍵字
+        keyword_str = json.dumps(chosen_kws, ensure_ascii=False) if isinstance(chosen_kws, list) else str(chosen_kws)
+
+        if not output_text:
+            logger.error(f"❌ 第 {idx+1} 篇輸出為空！關鍵字: {keyword_str}")
+            article_generation_progress.add_failed_keyword(keyword_str, "LLM 輸出為空")
+            continue
+
         try:
             match = re.search(r'\[.*\]', output_text, re.S)
             parsed = json.loads(match.group(0)) if match else json.loads(output_text)
@@ -617,13 +626,22 @@ def background_generate_articles(
 
                 all_articles.append(record)
 
+        except json.JSONDecodeError as e:
+            logger.error(f"⚠️ JSON 解析錯誤 (第 {idx+1} 篇): {e}")
+            logger.error(f"原始輸出前 500 字: {output_text[:500]}...")
+            article_generation_progress.add_failed_keyword(keyword_str, f"JSON 解析失敗: {e}")
+            article_generation_progress.add_parse_failure(keyword_str, str(e), output_text)
+            continue
         except Exception as e:
-            logger.error(f"⚠️ 解析錯誤：{e}")
-            logger.error(f"原始輸出：{output_text[:400]}...")
+            logger.error(f"⚠️ 解析錯誤 (第 {idx+1} 篇): {e}")
+            logger.error(f"原始輸出前 500 字: {output_text[:500]}...")
+            article_generation_progress.add_failed_keyword(keyword_str, f"解析異常: {e}")
+            article_generation_progress.add_parse_failure(keyword_str, str(e), output_text)
             continue
 
     # 批次插入資料庫
     saved_count = 0
+    db_failures = 0
     for art in all_articles:
         try:
             result = insert_article(art)
@@ -633,11 +651,25 @@ def background_generate_articles(
                 saved_count += 1
                 logger.info(f"✅ 已儲存文章: {title}")
             else:
+                db_failures += 1
                 logger.error(f"❌ 儲存文章失敗: {result.get('message', '未知錯誤')}")
+                article_generation_progress.add_error(f"資料庫儲存失敗: {result.get('message', '未知錯誤')}")
         except Exception as e:
+            db_failures += 1
             logger.error(f"❌ 儲存文章時發生異常: {e}")
+            article_generation_progress.add_error(f"資料庫異常: {e}")
 
-    logger.info(f"✅ 成功儲存 {saved_count}/{len(all_articles)} 篇雙語文章到資料庫")
+    # 診斷摘要
+    logger.info("=" * 60)
+    logger.info("📊 生成任務診斷摘要")
+    logger.info(f"   總請求: {total_articles} 篇")
+    logger.info(f"   成功解析: {len(all_articles)} 篇")
+    logger.info(f"   成功儲存: {saved_count} 篇")
+    logger.info(f"   解析失敗: {total_articles - len(all_articles)} 篇")
+    logger.info(f"   儲存失敗: {db_failures} 篇")
+    if article_generation_progress.failed_keywords:
+        logger.warning(f"   失敗關鍵字: {article_generation_progress.failed_keywords}")
+    logger.info("=" * 60)
 
     # 完成
     article_generation_progress.update(running=False)
@@ -661,7 +693,8 @@ def background_generate_articles_by_source(
     """
     total_articles = len(selected_keywords)
 
-    # 初始化進度
+    # 初始化進度（包含診斷欄位重置）
+    article_generation_progress.reset()
     article_generation_progress.update(
         total=total_articles,
         completed=0,
@@ -749,12 +782,28 @@ def background_generate_articles_by_source(
         total_tokens_used += llm_metadata.get("tokens_used", 0)
         logger.info(f"🔍 解析第 {idx+1} 篇: provider={llm_metadata.get('provider')}, model={llm_metadata.get('model')}, output_len={len(output_text) if output_text else 0}")
 
+        # 診斷：記錄關鍵字（用於追蹤失敗）
+        keyword_str = json.dumps(chosen_kws, ensure_ascii=False) if isinstance(chosen_kws, list) else str(chosen_kws)
+
         if not output_text:
-            logger.error(f"❌ 第 {idx+1} 篇輸出為空！")
+            logger.error(f"❌ 第 {idx+1} 篇輸出為空！關鍵字: {keyword_str}")
+            article_generation_progress.add_failed_keyword(keyword_str, "LLM 輸出為空")
+            article_generation_progress.add_error(f"第 {idx+1} 篇輸出為空 (關鍵字: {keyword_str})")
             continue
 
+        # 診斷：記錄原始輸出前 200 字（用於追蹤格式問題）
+        logger.debug(f"📝 第 {idx+1} 篇原始輸出前 200 字: {output_text[:200]}...")
+
         try:
+            # 嘗試多種 JSON 匹配模式
             match = re.search(r'\[.*\]', output_text, re.S)
+
+            # 診斷：記錄是否找到 JSON 數組
+            if match:
+                logger.debug(f"✅ 第 {idx+1} 篇找到 JSON 數組，長度: {len(match.group(0))}")
+            else:
+                logger.warning(f"⚠️ 第 {idx+1} 篇未找到 JSON 數組格式，嘗試直接解析")
+
             parsed = json.loads(match.group(0)) if match else json.loads(output_text)
 
             if not isinstance(parsed, list):
@@ -792,15 +841,24 @@ def background_generate_articles_by_source(
 
                 all_articles.append(record)
 
+        except json.JSONDecodeError as e:
+            logger.error(f"⚠️ JSON 解析錯誤 (第 {idx+1} 篇): {e}")
+            logger.error(f"原始輸出前 500 字: {output_text[:500]}...")
+            article_generation_progress.add_failed_keyword(keyword_str, f"JSON 解析失敗: {e}")
+            article_generation_progress.add_parse_failure(keyword_str, str(e), output_text)
+            continue
         except Exception as e:
-            logger.error(f"⚠️ 解析錯誤：{e}")
-            logger.error(f"原始輸出：{output_text[:400]}...")
+            logger.error(f"⚠️ 解析錯誤 (第 {idx+1} 篇): {e}")
+            logger.error(f"原始輸出前 500 字: {output_text[:500]}...")
+            article_generation_progress.add_failed_keyword(keyword_str, f"解析異常: {e}")
+            article_generation_progress.add_parse_failure(keyword_str, str(e), output_text)
             continue
 
     logger.info(f"📊 解析完成，準備儲存 {len(all_articles)} 篇文章")
 
     # 批次插入資料庫
     saved_count = 0
+    db_failures = 0
     for art in all_articles:
         try:
             logger.info(f"💾 正在儲存文章: {art.get('title_zh', '未命名')[:30]}...")
@@ -811,12 +869,27 @@ def background_generate_articles_by_source(
                 saved_count += 1
                 logger.info(f"✅ 已儲存文章: {title} (ID: {result.get('id', 'unknown')})")
             else:
-                logger.error(f"❌ 儲存文章失敗: {result.get('message', '未知錯誤')}")
+                db_failures += 1
+                error_msg = result.get('message', '未知錯誤')
+                logger.error(f"❌ 儲存文章失敗: {error_msg}")
+                article_generation_progress.add_error(f"資料庫儲存失敗: {error_msg}")
         except Exception as e:
+            db_failures += 1
             logger.error(f"❌ 儲存文章時發生異常: {e}", exc_info=True)
+            article_generation_progress.add_error(f"資料庫異常: {e}")
 
-    logger.info(f"✅ 成功儲存 {saved_count}/{len(all_articles)} 篇雙語文章到資料庫")
-    logger.info(f"📊 總 tokens 使用量: {total_tokens_used}")
+    # 診斷摘要
+    logger.info("=" * 60)
+    logger.info("📊 生成任務診斷摘要")
+    logger.info(f"   總請求: {total_articles} 篇")
+    logger.info(f"   成功解析: {len(all_articles)} 篇")
+    logger.info(f"   成功儲存: {saved_count} 篇")
+    logger.info(f"   解析失敗: {total_articles - len(all_articles)} 篇")
+    logger.info(f"   儲存失敗: {db_failures} 篇")
+    logger.info(f"   總 tokens: {total_tokens_used}")
+    if article_generation_progress.failed_keywords:
+        logger.warning(f"   失敗關鍵字: {article_generation_progress.failed_keywords}")
+    logger.info("=" * 60)
 
     # 完成
     article_generation_progress.update(running=False, tokens_used=total_tokens_used)
