@@ -43,6 +43,7 @@ class Config:
             "api_key_env": "POE_API_KEY",
             "models": {
                 "gpt-5.2": {"name": "GPT-5.2", "desc": "最新旗艦，能力最強", "has_thinking": False},
+                "gpt-5.2-instant": {"name": "GPT-5.2 Instant", "desc": "極速版 GPT-5.2，速度最快", "has_thinking": False},
                 "gpt-5-mini": {"name": "GPT-5 Mini", "desc": "輕量版 GPT-5，快速便宜", "has_thinking": False},
                 "gpt-4.1": {"name": "GPT-4.1", "desc": "穩定可靠，廣泛應用", "has_thinking": False},
                 "gpt-4.1-mini": {"name": "GPT-4.1 Mini", "desc": "輕量快速，適合簡單任務", "has_thinking": False},
