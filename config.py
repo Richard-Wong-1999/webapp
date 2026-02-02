@@ -65,8 +65,8 @@ class Config:
     ARTICLE_CACHE_TTL = 3600  # 1 hour in seconds
 
     # Threading and rate limiting
-    ARTICLE_GENERATION_WORKERS = 2  # 減少並發數以避免 API 速率限制
-    API_RATE_LIMIT = 0.25  # Calls per second (1 call every 4 seconds)
+    ARTICLE_GENERATION_WORKERS = 3  # 並發數
+    API_RATE_LIMIT = 0.5  # Calls per second (1 call every 2 seconds)
 
     # Content limits
     MAX_CHARS_ZH = 3800
