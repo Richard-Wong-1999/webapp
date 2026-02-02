@@ -10,6 +10,7 @@ from config import Config
 from utils.logger import logger
 from utils.text_processing import build_reference_content_blocks_flexible
 from services.deepseek_client import call_deepseek
+from services.llm_client import call_llm, get_current_model, accumulate_poe_points
 from services.keyword_extractor import (
     get_recent_articles_text,
     get_relevant_reference_blocks
@@ -359,7 +360,9 @@ def generate_single_article_by_source(
     timestamp: str,
     total_articles: int,
     fallback_content: str,
-    actual_source: str = None
+    actual_source: str = None,
+    llm_provider: str = None,
+    llm_model: str = None
 ) -> tuple:
     """根據關鍵字來源生成文章
 
@@ -501,13 +504,13 @@ def generate_single_article_by_source(
             "keyword_source": keyword_source
         })
 
-    # 呼叫 API
-    output = call_deepseek(prompt_zh)
+    # 呼叫 LLM API（支援多模型切換）
+    output, llm_metadata = call_llm(prompt_zh, provider=llm_provider, model=llm_model)
 
     # 更新進度
     article_generation_progress.increment()
 
-    return (article_index, output, chosen_keywords, prompt_zh)
+    return (article_index, output, chosen_keywords, prompt_zh, llm_metadata)
 
 
 def background_generate_articles(
@@ -642,7 +645,9 @@ def background_generate_articles_by_source(
     selected_keywords: List[str],
     timestamp: str,
     keyword_source: str = "swd",
-    keyword_sources_map: Dict[str, str] = None
+    keyword_sources_map: Dict[str, str] = None,
+    llm_provider: str = None,
+    llm_model: str = None
 ):
     """背景生成文章（根據關鍵字來源選擇參考資料）
 
@@ -666,7 +671,14 @@ def background_generate_articles_by_source(
     with generated_prompts_lock:
         generated_prompts[timestamp] = []
 
+    # 使用預設值（如果未指定）
+    if not llm_provider:
+        llm_provider = Config.DEFAULT_PROVIDER
+    if not llm_model:
+        llm_model = Config.DEFAULT_MODEL
+
     logger.info(f"🚀 開始生成 {total_articles} 篇文章（keyword_source={keyword_source}）")
+    logger.info(f"🤖 使用 LLM 模型: {llm_provider}/{llm_model}")
     logger.info(f"📋 關鍵字來源映射: {keyword_sources_map}")
 
     # 準備備用內容（使用 SWD 新聞稿）
@@ -711,7 +723,9 @@ def background_generate_articles_by_source(
                     timestamp,
                     total_articles,
                     fallback_content,
-                    actual_source
+                    actual_source,
+                    llm_provider,
+                    llm_model
                 )
             )
 
@@ -723,7 +737,10 @@ def background_generate_articles_by_source(
 
     # 解析並儲存文章
     all_articles = []
-    for idx, output_text, chosen_kws, prompt_zh in sorted(results, key=lambda x: x[0]):
+    total_tokens_used = 0
+    for idx, output_text, chosen_kws, prompt_zh, llm_metadata in sorted(results, key=lambda x: x[0]):
+        # 累計 tokens 使用量
+        total_tokens_used += llm_metadata.get("tokens_used", 0)
         try:
             match = re.search(r'\[.*\]', output_text, re.S)
             parsed = json.loads(match.group(0)) if match else json.loads(output_text)
@@ -751,7 +768,9 @@ def background_generate_articles_by_source(
                     "keywords": json.dumps(item.get("keywords", chosen_kws), ensure_ascii=False),
                     "timestamp": timestamp,
                     "prompt_zh": prompt_zh,
-                    "prompt_en": ""  # 目前只有中文 prompt
+                    "prompt_en": "",  # 目前只有中文 prompt
+                    "llm_provider": llm_metadata.get("provider", ""),
+                    "llm_model": llm_metadata.get("model", "")
                 }
 
                 record["title"] = record["title_zh"] or "未命名"
@@ -785,7 +804,8 @@ def background_generate_articles_by_source(
             logger.error(f"❌ 儲存文章時發生異常: {e}", exc_info=True)
 
     logger.info(f"✅ 成功儲存 {saved_count}/{len(all_articles)} 篇雙語文章到資料庫")
+    logger.info(f"📊 總 tokens 使用量: {total_tokens_used}")
 
     # 完成
-    article_generation_progress.update(running=False)
+    article_generation_progress.update(running=False, tokens_used=total_tokens_used)
     logger.info("🏁 background_generate_articles_by_source 任務完成")

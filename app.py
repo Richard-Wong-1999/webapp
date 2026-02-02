@@ -7,7 +7,7 @@ import os
 import json
 import threading
 from datetime import datetime, timezone, timedelta
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session
 from flask_compress import Compress
 
 # 配置與模型
@@ -43,6 +43,13 @@ from services.dataforseo_client import dataforseo_client
 from services.article_generator import (
     generate_single_article_with_seo,
     background_generate_articles_by_source
+)
+from services.llm_client import (
+    get_current_model,
+    get_available_models,
+    set_model,
+    get_poe_points,
+    accumulate_poe_points
 )
 
 # 工具
@@ -334,10 +341,16 @@ def generate_articles():
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+    # 取得當前選擇的 LLM 模型
+    llm_provider = session.get('selected_provider', Config.DEFAULT_PROVIDER)
+    llm_model = session.get('selected_model', Config.DEFAULT_MODEL)
+
+    logger.info(f"🤖 使用 LLM 模型: {llm_provider}/{llm_model}")
+
     # 使用新的根據來源生成函數
     threading.Thread(
         target=background_generate_articles_by_source,
-        args=(selected_keywords, timestamp, keyword_source, keyword_sources_map)
+        args=(selected_keywords, timestamp, keyword_source, keyword_sources_map, llm_provider, llm_model)
     ).start()
 
     return render_template("generate.html")
@@ -632,6 +645,55 @@ def seo_api_status():
     return jsonify({
         "configured": dataforseo_client.is_configured(),
         "message": "DataForSEO API 已配置" if dataforseo_client.is_configured() else "DataForSEO API 未配置"
+    })
+
+
+# ==========================================================
+# 路由：LLM 模型切換
+# ==========================================================
+@app.route("/api/set_model", methods=["POST"])
+def api_set_model():
+    """設定當前使用的 LLM 模型"""
+    data = request.json
+    provider = data.get('provider', Config.DEFAULT_PROVIDER)
+    model = data.get('model', Config.DEFAULT_MODEL)
+
+    success = set_model(session, provider, model)
+
+    if success:
+        return jsonify({
+            "success": True,
+            "provider": provider,
+            "model": model,
+            "message": f"已切換至 {provider}/{model}"
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "message": "無效的模型設定"
+        }), 400
+
+
+@app.route("/api/get_model", methods=["GET"])
+def api_get_model():
+    """獲取當前選擇的模型"""
+    model_info = get_current_model(session)
+    return jsonify(model_info)
+
+
+@app.route("/api/available_models", methods=["GET"])
+def api_available_models():
+    """獲取所有可用的模型清單"""
+    return jsonify(get_available_models())
+
+
+@app.route("/api/poe_usage", methods=["GET"])
+def api_poe_usage():
+    """獲取 Poe API 使用量"""
+    points_used = get_poe_points(session)
+    return jsonify({
+        "points_used": points_used,
+        "points_remaining": None  # Poe API 目前不支援查詢餘額
     })
 
 

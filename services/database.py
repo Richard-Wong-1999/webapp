@@ -170,6 +170,10 @@ def init_database():
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS prompt_zh TEXT")
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS prompt_en TEXT")
 
+        # 添加 LLM 模型欄位（記錄文章使用的 AI 模型）
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS llm_provider VARCHAR(50)")
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS llm_model VARCHAR(100)")
+
         # 添加索引以提升查詢效能
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_articles_created_at
@@ -363,9 +367,10 @@ def insert_article(conn, article_data: Dict) -> Dict:
             title, body, meta_title, meta_description, keywords, timestamp,
             title_zh, body_zh, meta_title_zh, meta_description_zh,
             title_en, body_en, meta_title_en, meta_description_en,
-            prompt_zh, prompt_en
+            prompt_zh, prompt_en,
+            llm_provider, llm_model
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING id
     """, (
         article_data.get("title", "未命名"),
@@ -383,7 +388,9 @@ def insert_article(conn, article_data: Dict) -> Dict:
         article_data.get("meta_title_en", ""),
         article_data.get("meta_description_en", ""),
         article_data.get("prompt_zh", ""),
-        article_data.get("prompt_en", "")
+        article_data.get("prompt_en", ""),
+        article_data.get("llm_provider", ""),
+        article_data.get("llm_model", "")
     ))
 
     article_id = cur.fetchone()[0]

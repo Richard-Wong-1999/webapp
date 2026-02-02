@@ -16,6 +16,18 @@ from .database import (
 
 from .deepseek_client import call_deepseek, reset_rate_limiter
 
+from .poe_client import call_poe, filter_thinking_content, reset_poe_limiter
+
+from .llm_client import (
+    call_llm,
+    get_current_model,
+    get_available_models,
+    set_model,
+    accumulate_poe_points,
+    get_poe_points,
+    reset_poe_points
+)
+
 from .keyword_extractor import (
     normalize_source,
     get_source_dir,
@@ -68,6 +80,18 @@ __all__ = [
     'insert_article',
     'call_deepseek',
     'reset_rate_limiter',
+    # Poe Client
+    'call_poe',
+    'filter_thinking_content',
+    'reset_poe_limiter',
+    # LLM Client
+    'call_llm',
+    'get_current_model',
+    'get_available_models',
+    'set_model',
+    'accumulate_poe_points',
+    'get_poe_points',
+    'reset_poe_points',
     'normalize_source',
     'get_source_dir',
     'get_cached_keywords',

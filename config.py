@@ -23,6 +23,38 @@ class Config:
     DEEPSEEK_TEMPERATURE = 0.7
     DEEPSEEK_MAX_TOKENS = 3500
 
+    # Poe API
+    POE_API_KEY = os.getenv("POE_API_KEY")
+    POE_API_URL = "https://api.poe.com/bot/"
+
+    # LLM 模型配置
+    LLM_PROVIDERS = {
+        "deepseek": {
+            "name": "DeepSeek（官方）",
+            "api_url": "https://api.deepseek.com/chat/completions",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "models": {
+                "deepseek-chat": {"name": "DeepSeek Chat", "has_thinking": False},
+                "deepseek-coder": {"name": "DeepSeek Coder", "has_thinking": False}
+            }
+        },
+        "poe": {
+            "name": "Poe API",
+            "api_url": "https://api.poe.com/bot/",
+            "api_key_env": "POE_API_KEY",
+            "models": {
+                "GPT-4o": {"name": "GPT-4o", "has_thinking": False},
+                "GPT-4o-Mini": {"name": "GPT-4o Mini", "has_thinking": False},
+                "Claude-3.5-Sonnet": {"name": "Claude 3.5 Sonnet", "has_thinking": False},
+                "Claude-3-Haiku": {"name": "Claude 3 Haiku", "has_thinking": False},
+                "Gemini-1.5-Flash": {"name": "Gemini 1.5 Flash", "has_thinking": False}
+            }
+        }
+    }
+
+    DEFAULT_PROVIDER = "deepseek"
+    DEFAULT_MODEL = "deepseek-chat"
+
     # Crawler directories
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     SWD_DIR = os.path.join(BASE_DIR, "crawler", "swd_press")

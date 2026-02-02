@@ -9,11 +9,12 @@ from utils.rate_limiter import RateLimiter
 api_limiter = RateLimiter(calls_per_second=Config.API_RATE_LIMIT)
 
 
-def call_deepseek(prompt_text: str, temperature: float = None, max_tokens: int = None) -> str:
+def call_deepseek(prompt_text: str, model: str = None, temperature: float = None, max_tokens: int = None) -> str:
     """呼叫 DeepSeek API
 
     Args:
         prompt_text: 提示文本
+        model: 模型名稱（可選，預設使用 Config.DEEPSEEK_MODEL）
         temperature: 溫度參數（可選）
         max_tokens: 最大 token 數（可選）
 
@@ -27,13 +28,16 @@ def call_deepseek(prompt_text: str, temperature: float = None, max_tokens: int =
     # 速率限制
     api_limiter.wait()
 
+    # 使用指定模型或預設模型
+    use_model = model or Config.DEEPSEEK_MODEL
+
     headers = {
         "Authorization": f"Bearer {Config.DEEPSEEK_API_KEY}",
         "Content-Type": "application/json"
     }
 
     payload = {
-        "model": Config.DEEPSEEK_MODEL,
+        "model": use_model,
         "messages": [{"role": "user", "content": prompt_text}],
         "temperature": temperature or Config.DEEPSEEK_TEMPERATURE,
         "max_tokens": max_tokens or Config.DEEPSEEK_MAX_TOKENS
@@ -50,7 +54,7 @@ def call_deepseek(prompt_text: str, temperature: float = None, max_tokens: int =
         if response.status_code == 200:
             res = response.json()
             content = res["choices"][0]["message"]["content"].strip()
-            logger.info(f"✅ DeepSeek API 呼叫成功（{len(content)} 字元）")
+            logger.info(f"✅ DeepSeek API ({use_model}) 呼叫成功（{len(content)} 字元）")
             return content
         else:
             logger.error(f"❌ DeepSeek 錯誤：{response.status_code} - {response.text}")
