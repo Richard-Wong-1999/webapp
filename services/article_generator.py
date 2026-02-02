@@ -28,6 +28,112 @@ generated_prompts = {}
 generated_prompts_lock = threading.Lock()
 
 
+def build_article_prompt(
+    main_keyword: str,
+    reference_content: str,
+    reference_section_title: str = "參考新聞資料",
+    seo_context: str = "",
+    chosen_keywords: list = None
+) -> str:
+    """構建優化後的 Blog 文章生成 Prompt
+
+    Args:
+        main_keyword: 主要關鍵詞
+        reference_content: 參考資料內容
+        reference_section_title: 參考資料區塊標題
+        seo_context: SEO 分析數據（可選）
+        chosen_keywords: 關鍵詞列表（可選，預設使用 main_keyword）
+
+    Returns:
+        優化後的 Prompt 字串
+    """
+    chosen_keywords = chosen_keywords or [main_keyword]
+    keywords_json = json.dumps(chosen_keywords, ensure_ascii=False)
+
+    seo_section = ""
+    if seo_context:
+        seo_section = f"\n---\n## SEO 分析數據\n{seo_context}\n---\n"
+
+    prompt = f"""你是一位香港地區的專業 Blog 內容寫作顧問與 SEO 專家，專注於長者服務與安老政策領域。
+
+## 任務目標
+根據提供的參考資料，以「{main_keyword}」為主題，撰寫一篇高品質的雙語 **Blog 文章**。
+
+## Blog 文章風格特點
+- 資訊性與可讀性並重
+- 適合網站發佈和社群分享
+- 對讀者有實用價值
+
+## 文章結構要求
+
+### 中文 Blog 文章（繁體中文，280-420字）
+1. **標題**：吸引點擊，包含關鍵詞「{main_keyword}」，15-25字
+2. **開頭段**（約80字）：點出主題重要性，吸引讀者繼續閱讀
+3. **主體段**（約200字）：說明要點、政策內容或服務細節，可用條列式增加可讀性
+4. **結尾段**（約80字）：總結重點或呼籲行動
+
+### 英文 Blog 文章（純英文，160-280 words）
+1. **Title**: Engaging blog title, includes keyword, under 70 characters
+2. **Opening** (~50 words): Hook and topic introduction
+3. **Body** (~150 words): Key points and details, can use bullet points
+4. **Closing** (~50 words): Summary or call to action
+
+## 寫作風格
+- 語調：專業但親切、客觀、關懷長者
+- 適合 Blog 閱讀：段落簡短、重點明確
+- 避免：過度推銷、誇張用語、政治敏感內容
+- 適用對象：關心長者服務的香港市民、照顧者、專業人士
+
+## SEO 優化要求
+1. **標題**：關鍵詞靠前，具吸引力，適合搜尋引擎
+2. **正文**：自然融入關鍵詞2-3次，避免堆砌
+3. **Meta Title**：60字元內，包含關鍵詞
+4. **Meta Description**：150字元內，包含關鍵詞，描述文章價值
+
+## 重要規則
+1. 內容必須與「長者」或「老人」相關
+2. 基於參考資料撰寫，不可捏造數據或事實
+3. 英文文章絕對不能包含任何中文字
+4. 如參考資料不足，可基於香港社會福利背景補充（但不編造具體數字）
+{seo_section}
+---
+## {reference_section_title}
+{reference_content}
+
+---
+## 主題關鍵詞
+{main_keyword}
+
+---
+## 輸出格式
+
+請嚴格按照以下JSON格式輸出，不要添加任何其他文字：
+
+```json
+[
+  {{
+    "zh": {{
+      "title": "【範例】{main_keyword}新政策助長者安享晚年",
+      "body": "中文 Blog 正文內容...",
+      "meta_title": "{main_keyword} | 香港長者服務資訊",
+      "meta_description": "了解{main_keyword}的最新資訊，為長者提供優質服務支援。"
+    }},
+    "en": {{
+      "title": "New Policy on {main_keyword} Benefits Elderly",
+      "body": "English blog body content...",
+      "meta_title": "{main_keyword} | Hong Kong Elderly Services",
+      "meta_description": "Learn about the latest {main_keyword} information."
+    }},
+    "keywords": {keywords_json}
+  }}
+]
+```
+
+請直接輸出JSON："""
+
+    return prompt
+
+
 def generate_single_article(
     article_index: int,
     main_keyword: str,
@@ -80,54 +186,13 @@ def generate_single_article(
         reference_content = fallback_content
         logger.warning(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（{source}）")
 
-    # 生成 prompt
-    prompt_zh = (
-        "你是一位香港地區的專業內容寫作顧問與 SEO 專家。\n\n"
-        "## 📋 任務說明\n"
-        f"請根據以下**真實新聞參考資料**，以「{main_keyword}」為**唯一主題**，一次輸出：\n"
-        "1) 一篇繁體中文 blog 文章（300-400字）\n"
-        "2) 一篇英文文章（約 180-250 words）\n\n"
-        "⚠️ 重要準則（必須遵守）：\n"
-        "1. 文章必須和「老人」或「長者」有關\n"
-        "2. 必須基於下方提供的參考資料內容，不可憑空捏造事實\n"
-        "3. 可以重組、摘要、改寫，但核心事實必須來自參考資料\n"
-        f"4. 文章標題和內容必須圍繞「{main_keyword}」展開\n"
-        "5. 保持客觀、專業的新聞報導風格\n"
-        "6. 如果參考資料不足，請基於關鍵詞生成符合香港社會福利/醫療政策背景的專業內容（但仍不要編造具體數據與細節）\n"
-        "7. **英文文章必須是純英文，絕對不能包含任何中文字**（關鍵詞如有中文請翻譯成英文）\n\n"
-        "---\n"
-        "## 📰 參考新聞資料（中英並列）\n"
-        f"{reference_content}\n\n"
-        "---\n\n"
-        "## 🎯 文章主題（唯一關鍵詞）\n"
-        f"**{main_keyword}**\n\n"
-        "---\n"
-        "## 📤 輸出格式（只輸出 JSON，不要任何說明文字）\n"
-        "請輸出 JSON 陣列，陣列只包含 1 個物件，格式如下：\n\n"
-        "```json\n"
-        "[\n"
-        "  {\n"
-        '    "zh": {\n'
-        f'      "title": "中文標題（必須包含「{main_keyword}」）",\n'
-        '      "body": "中文正文（繁體中文 300-400 字）",\n'
-        f'      "meta_title": "中文SEO標題（60字內，必須包含「{main_keyword}」）",\n'
-        '      "meta_description": "中文SEO摘要（150字內）"\n'
-        "    },\n"
-        '    "en": {\n'
-        f'      "title": "English title (must include \\"{main_keyword}\\")",\n'
-        '      "body": "English body (about 180-250 words)",\n'
-        f'      "meta_title": "English SEO title (<=60 chars, must include \\"{main_keyword}\\")",\n'
-        '      "meta_description": "English SEO description (<=150 chars)"\n'
-        "    },\n"
-        f'    "keywords": {json.dumps(chosen_keywords, ensure_ascii=False)}\n'
-        "  }\n"
-        "]\n"
-        "```\n\n"
-        "🔴 **重要提醒：**\n"
-        f"- `keywords` 欄位必須完全使用：{json.dumps(chosen_keywords, ensure_ascii=False)}\n"
-        "- 不可添加、修改或替換關鍵詞\n"
-        "- 請確保 JSON 格式正確，可直接解析\n"
-        "- 直接輸出 JSON 陣列，不要包含其他說明文字\n"
+    # 生成 prompt（使用統一模板）
+    prompt_zh = build_article_prompt(
+        main_keyword=main_keyword,
+        reference_content=reference_content,
+        reference_section_title="參考新聞資料（中英並列）",
+        seo_context="",
+        chosen_keywords=chosen_keywords
     )
 
     # 儲存 prompt（用於除錯）
@@ -268,69 +333,13 @@ def generate_single_article_with_seo(
         reference_content = fallback_content
         logger.warning(f"⚠️ 未找到「{main_keyword}」相關新聞，使用備用內容（{source}）")
 
-    # 構建 SEO prompt 區塊
-    seo_prompt_section = build_seo_prompt_section(seo_context_str)
-
-    # 生成 prompt（含 SEO 數據）
-    prompt_zh = (
-        "你是一位香港地區的專業內容寫作顧問與 SEO 專家。\n\n"
-        "## 📋 任務說明\n"
-        f"請根據以下**真實新聞參考資料**和 **SEO 分析數據**，以「{main_keyword}」為**唯一主題**，一次輸出：\n"
-        "1) 一篇繁體中文 blog 文章（300-400字）\n"
-        "2) 一篇英文文章（約 180-250 words）\n\n"
-        "⚠️ 重要準則（必須遵守）：\n"
-        "1. 文章必須和「老人」或「長者」有關\n"
-        "2. 必須基於下方提供的參考資料內容，不可憑空捏造事實\n"
-        "3. 可以重組、摘要、改寫，但核心事實必須來自參考資料\n"
-        f"4. 文章標題和內容必須圍繞「{main_keyword}」展開\n"
-        "5. 保持客觀、專業的新聞報導風格\n"
-        "6. 如果參考資料不足，請基於關鍵詞生成符合香港社會福利/醫療政策背景的專業內容（但仍不要編造具體數據與細節）\n"
-    )
-
-    # 加入 SEO 區塊
-    if seo_prompt_section:
-        prompt_zh += (
-            "7. 請參考 SEO 分析數據優化文章：\n"
-            "   - 適當融入相關關鍵字和長尾詞\n"
-            "   - 回答「用戶常問問題」中的問題\n"
-            "   - 參考競爭對手內容的結構和深度\n\n"
-        )
-        prompt_zh += seo_prompt_section
-
-    prompt_zh += (
-        "\n---\n"
-        "## 📰 參考新聞資料（中英並列）\n"
-        f"{reference_content}\n\n"
-        "---\n\n"
-        "## 🎯 文章主題（唯一關鍵詞）\n"
-        f"**{main_keyword}**\n\n"
-        "---\n"
-        "## 📤 輸出格式（只輸出 JSON，不要任何說明文字）\n"
-        "請輸出 JSON 陣列，陣列只包含 1 個物件，格式如下：\n\n"
-        "```json\n"
-        "[\n"
-        "  {\n"
-        '    "zh": {\n'
-        f'      "title": "中文標題（必須包含「{main_keyword}」）",\n'
-        '      "body": "中文正文（繁體中文 300-400 字）",\n'
-        f'      "meta_title": "中文SEO標題（60字內，必須包含「{main_keyword}」）",\n'
-        '      "meta_description": "中文SEO摘要（150字內）"\n'
-        "    },\n"
-        '    "en": {\n'
-        f'      "title": "English title (must include \\"{main_keyword}\\")",\n'
-        '      "body": "English body (about 180-250 words)",\n'
-        f'      "meta_title": "English SEO title (<=60 chars, must include \\"{main_keyword}\\")",\n'
-        '      "meta_description": "English SEO description (<=150 chars)"\n'
-        "    },\n"
-        f'    "keywords": {json.dumps(chosen_keywords, ensure_ascii=False)}\n'
-        "  }\n"
-        "]\n"
-        "```\n\n"
-        "🔴 **重要提醒：**\n"
-        f"- `keywords` 欄位必須完全使用：{json.dumps(chosen_keywords, ensure_ascii=False)}\n"
-        "- 不可添加、修改或替換關鍵詞\n"
-        "- 請確保 JSON 格式正確，可直接解析\n"
-        "- 直接輸出 JSON 陣列，不要包含其他說明文字\n"
+    # 生成 prompt（使用統一模板，含 SEO 數據）
+    prompt_zh = build_article_prompt(
+        main_keyword=main_keyword,
+        reference_content=reference_content,
+        reference_section_title="參考新聞資料（中英並列）",
+        seo_context=seo_context_str,
+        chosen_keywords=chosen_keywords
     )
 
     # 儲存 prompt（用於除錯）
@@ -445,54 +454,13 @@ def generate_single_article_by_source(
 
         reference_section_title = "🌐 網路搜尋結果參考"
 
-    # 生成 prompt
-    prompt_zh = (
-        "你是一位香港地區的專業內容寫作顧問與 SEO 專家。\n\n"
-        "## 📋 任務說明\n"
-        f"請根據以下**參考資料**，以「{main_keyword}」為**唯一主題**，一次輸出：\n"
-        "1) 一篇繁體中文 blog 文章（300-400字）\n"
-        "2) 一篇英文文章（約 180-250 words）\n\n"
-        "⚠️ 重要準則（必須遵守）：\n"
-        "1. 文章必須和「老人」或「長者」有關\n"
-        "2. 必須基於下方提供的參考資料內容，不可憑空捏造事實\n"
-        "3. 可以重組、摘要、改寫，但核心事實必須來自參考資料\n"
-        f"4. 文章標題和內容必須圍繞「{main_keyword}」展開\n"
-        "5. 保持客觀、專業的新聞報導風格\n"
-        "6. 如果參考資料不足，請基於關鍵詞生成符合香港社會福利/醫療政策背景的專業內容（但仍不要編造具體數據與細節）\n"
-        "7. **英文文章必須是純英文，絕對不能包含任何中文字**（關鍵詞如有中文請翻譯成英文）\n\n"
-        "---\n"
-        f"## {reference_section_title}\n"
-        f"{reference_content}\n\n"
-        "---\n\n"
-        "## 🎯 文章主題（唯一關鍵詞）\n"
-        f"**{main_keyword}**\n\n"
-        "---\n"
-        "## 📤 輸出格式（只輸出 JSON，不要任何說明文字）\n"
-        "請輸出 JSON 陣列，陣列只包含 1 個物件，格式如下：\n\n"
-        "```json\n"
-        "[\n"
-        "  {\n"
-        '    "zh": {\n'
-        f'      "title": "中文標題（必須包含「{main_keyword}」）",\n'
-        '      "body": "中文正文（繁體中文 300-400 字）",\n'
-        f'      "meta_title": "中文SEO標題（60字內，必須包含「{main_keyword}」）",\n'
-        '      "meta_description": "中文SEO摘要（150字內）"\n'
-        "    },\n"
-        '    "en": {\n'
-        f'      "title": "English title (must include \\"{main_keyword}\\")",\n'
-        '      "body": "English body (about 180-250 words)",\n'
-        f'      "meta_title": "English SEO title (<=60 chars, must include \\"{main_keyword}\\")",\n'
-        '      "meta_description": "English SEO description (<=150 chars)"\n'
-        "    },\n"
-        f'    "keywords": {json.dumps(chosen_keywords, ensure_ascii=False)}\n'
-        "  }\n"
-        "]\n"
-        "```\n\n"
-        "🔴 **重要提醒：**\n"
-        f"- `keywords` 欄位必須完全使用：{json.dumps(chosen_keywords, ensure_ascii=False)}\n"
-        "- 不可添加、修改或替換關鍵詞\n"
-        "- 請確保 JSON 格式正確，可直接解析\n"
-        "- 直接輸出 JSON 陣列，不要包含其他說明文字\n"
+    # 生成 prompt（使用統一模板）
+    prompt_zh = build_article_prompt(
+        main_keyword=main_keyword,
+        reference_content=reference_content,
+        reference_section_title=reference_section_title,
+        seo_context="",
+        chosen_keywords=chosen_keywords
     )
 
     # 儲存 prompt（用於除錯）
