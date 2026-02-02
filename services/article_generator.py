@@ -733,9 +733,13 @@ def background_generate_articles_by_source(
 
         for future in as_completed(futures):
             try:
-                results.append(future.result())
+                result = future.result()
+                logger.info(f"✅ 收到生成結果: index={result[0]}, output_len={len(result[1]) if result[1] else 0}")
+                results.append(result)
             except Exception as e:
-                logger.error(f"❌ 文章生成失敗：{e}")
+                logger.error(f"❌ 文章生成失敗：{e}", exc_info=True)
+
+    logger.info(f"📋 共收到 {len(results)} 個結果")
 
     # 解析並儲存文章
     all_articles = []
@@ -743,6 +747,12 @@ def background_generate_articles_by_source(
     for idx, output_text, chosen_kws, prompt_zh, llm_metadata in sorted(results, key=lambda x: x[0]):
         # 累計 tokens 使用量
         total_tokens_used += llm_metadata.get("tokens_used", 0)
+        logger.info(f"🔍 解析第 {idx+1} 篇: provider={llm_metadata.get('provider')}, model={llm_metadata.get('model')}, output_len={len(output_text) if output_text else 0}")
+
+        if not output_text:
+            logger.error(f"❌ 第 {idx+1} 篇輸出為空！")
+            continue
+
         try:
             match = re.search(r'\[.*\]', output_text, re.S)
             parsed = json.loads(match.group(0)) if match else json.loads(output_text)
