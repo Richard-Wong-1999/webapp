@@ -733,6 +733,63 @@ def api_debug_test_poe():
     return jsonify(result)
 
 
+@app.route("/api/debug/test_generate", methods=["GET"])
+def api_debug_test_generate():
+    """測試文章生成流程（除錯用）"""
+    from services.llm_client import call_llm
+    import json
+    import re
+
+    test_model = request.args.get("model", "o4-mini")
+    provider = "poe" if test_model != "deepseek-chat" else "deepseek"
+
+    result = {
+        "provider": provider,
+        "model": test_model,
+        "success": False,
+        "raw_response": None,
+        "parsed_json": None,
+        "error": None
+    }
+
+    # 簡化的測試 prompt
+    test_prompt = '''請輸出以下 JSON 格式（只輸出 JSON，不要其他文字）：
+```json
+[
+  {
+    "zh": {"title": "測試標題", "body": "測試內容"},
+    "en": {"title": "Test Title", "body": "Test content"},
+    "keywords": ["測試"]
+  }
+]
+```'''
+
+    try:
+        content, metadata = call_llm(test_prompt, provider=provider, model=test_model)
+        result["raw_response"] = content[:500] if content else None
+        result["tokens_used"] = metadata.get("tokens_used", 0)
+
+        if not content:
+            result["error"] = "LLM 返回空內容"
+            return jsonify(result)
+
+        # 嘗試解析 JSON
+        match = re.search(r'\[.*\]', content, re.S)
+        if match:
+            parsed = json.loads(match.group(0))
+            result["parsed_json"] = parsed
+            result["success"] = True
+        else:
+            result["error"] = "無法找到 JSON 陣列"
+
+    except json.JSONDecodeError as e:
+        result["error"] = f"JSON 解析錯誤: {str(e)}"
+    except Exception as e:
+        result["error"] = f"錯誤: {str(e)}"
+
+    return jsonify(result)
+
+
 @app.route("/api/debug/db_status", methods=["GET"])
 def api_debug_db_status():
     """檢查資料庫狀態（除錯用）"""
