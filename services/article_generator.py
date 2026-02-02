@@ -592,8 +592,23 @@ def background_generate_articles(
             continue
 
         try:
-            match = re.search(r'\[.*\]', output_text, re.S)
-            parsed = json.loads(match.group(0)) if match else json.loads(output_text)
+            # 清理 markdown 代碼塊標記
+            cleaned_output = output_text.strip()
+            if '```' in cleaned_output:
+                # 方法1: 嘗試提取代碼塊內容
+                code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', cleaned_output)
+                if code_block_match:
+                    cleaned_output = code_block_match.group(1).strip()
+                    logger.info(f"🧹 第 {idx+1} 篇已提取 markdown 代碼塊內容")
+                else:
+                    # 方法2: 直接移除 ``` 標記
+                    cleaned_output = re.sub(r'```(?:json)?', '', cleaned_output)
+                    cleaned_output = re.sub(r'```', '', cleaned_output)
+                    cleaned_output = cleaned_output.strip()
+                    logger.info(f"🧹 第 {idx+1} 篇已移除 markdown 標記")
+
+            match = re.search(r'\[.*\]', cleaned_output, re.S)
+            parsed = json.loads(match.group(0)) if match else json.loads(cleaned_output)
 
             if not isinstance(parsed, list):
                 parsed = [parsed]
@@ -795,8 +810,23 @@ def background_generate_articles_by_source(
         logger.debug(f"📝 第 {idx+1} 篇原始輸出前 200 字: {output_text[:200]}...")
 
         try:
+            # 清理 markdown 代碼塊標記（```json ... ``` 或 ``` ... ```）
+            cleaned_output = output_text.strip()
+            if '```' in cleaned_output:
+                # 方法1: 嘗試提取代碼塊內容
+                code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', cleaned_output)
+                if code_block_match:
+                    cleaned_output = code_block_match.group(1).strip()
+                    logger.info(f"🧹 第 {idx+1} 篇已提取 markdown 代碼塊內容")
+                else:
+                    # 方法2: 直接移除 ``` 標記
+                    cleaned_output = re.sub(r'```(?:json)?', '', cleaned_output)
+                    cleaned_output = re.sub(r'```', '', cleaned_output)
+                    cleaned_output = cleaned_output.strip()
+                    logger.info(f"🧹 第 {idx+1} 篇已移除 markdown 標記")
+
             # 嘗試多種 JSON 匹配模式
-            match = re.search(r'\[.*\]', output_text, re.S)
+            match = re.search(r'\[.*\]', cleaned_output, re.S)
 
             # 診斷：記錄是否找到 JSON 數組
             if match:
@@ -804,7 +834,7 @@ def background_generate_articles_by_source(
             else:
                 logger.warning(f"⚠️ 第 {idx+1} 篇未找到 JSON 數組格式，嘗試直接解析")
 
-            parsed = json.loads(match.group(0)) if match else json.loads(output_text)
+            parsed = json.loads(match.group(0)) if match else json.loads(cleaned_output)
 
             if not isinstance(parsed, list):
                 parsed = [parsed]
