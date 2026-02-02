@@ -23,9 +23,9 @@ class Config:
     DEEPSEEK_TEMPERATURE = 0.7
     DEEPSEEK_MAX_TOKENS = 3500
 
-    # Poe API
+    # Poe API (OpenAI 相容格式)
     POE_API_KEY = os.getenv("POE_API_KEY")
-    POE_API_URL = "https://api.poe.com/bot/"
+    POE_API_URL = "https://api.poe.com/v1/chat/completions"
 
     # LLM 模型配置
     LLM_PROVIDERS = {
