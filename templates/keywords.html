@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>關鍵字分析結果</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 
 <body class="keywords-body">
@@ -77,6 +78,14 @@
                 <strong>SERP 項目類型：</strong>
                 <span id="metricSerpTypes" style="font-size: 12px; color: #666;">-</span>
               </div>
+            </div>
+          </div>
+
+          <!-- 趨勢圖表容器 -->
+          <div id="trendChartContainer" style="display:none; margin-top: 15px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: var(--radius);">
+            <h5 style="margin: 0 0 10px 0; font-size: 13px; color: white;">📈 搜尋量趨勢（過去12個月）</h5>
+            <div style="height: 150px; position: relative;">
+              <canvas id="trendChart"></canvas>
             </div>
           </div>
 
@@ -196,6 +205,58 @@
     }
 
     // ============================================================
+    // 趨勢圖表
+    // ============================================================
+    let trendChartInstance = null;
+
+    function renderTrendChart(monthlySearches, trendData) {
+      const container = document.getElementById('trendChartContainer');
+      const canvas = document.getElementById('trendChart');
+
+      if (!monthlySearches || monthlySearches.length === 0) {
+        container.style.display = 'none';
+        return;
+      }
+
+      container.style.display = 'block';
+
+      if (trendChartInstance) trendChartInstance.destroy();
+
+      const sorted = [...monthlySearches].sort((a, b) =>
+        new Date(a.year, a.month - 1) - new Date(b.year, b.month - 1)
+      );
+
+      const labels = sorted.map(d => `${d.year}/${d.month}`);
+      const values = sorted.map(d => d.search_volume || 0);
+      const yearlyTrend = trendData?.yearly || 0;
+      const borderColor = yearlyTrend >= 0 ? 'rgba(76, 175, 80, 1)' : 'rgba(244, 67, 54, 1)';
+
+      trendChartInstance = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '月搜尋量',
+            data: values,
+            borderColor: borderColor,
+            backgroundColor: yearlyTrend >= 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: 'rgba(255,255,255,0.8)', font: { size: 10 } } },
+            y: { ticks: { color: 'rgba(255,255,255,0.8)', font: { size: 10 } } }
+          }
+        }
+      });
+    }
+
+    // ============================================================
     // SEO 關鍵字研究
     // ============================================================
     let seoResearching = false;
@@ -304,6 +365,10 @@
         suggestions.forEach(s => {
           window.seoSuggestionMetrics[s.keyword] = s;
         });
+
+        // 渲染趨勢圖表
+        let monthlySearches = data.suggestions?.[0]?.monthly_searches || [];
+        renderTrendChart(monthlySearches, data.metrics.search_volume_trend);
 
       } catch (e) {
         console.error('Research error:', e);

@@ -12,7 +12,7 @@
 
     <div class="meta">
       <div class="meta-item">🆔 <strong>文章ID：</strong>{{ article.id }}</div>
-      <div class="meta-item">📅 <strong>建立時間：</strong>{{ article.created_at.strftime('%Y-%m-%d %H:%M:%S') if article.created_at else '未知' }}</div>
+      <div class="meta-item">📅 <strong>建立時間：</strong>{{ article.created_at|to_hk_time('%Y-%m-%d %H:%M:%S') }} (HKT)</div>
       <div class="meta-item">🏷️ <strong>批次：</strong>{{ article.timestamp or '未分類' }}</div>
     </div>
 

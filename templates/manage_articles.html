@@ -46,7 +46,7 @@
         <input type="checkbox" class="article-checkbox" data-id="{{ article.id }}" onchange="updateSelection()">
         <div class="article-title">{{ article.title }}</div>
         <div class="article-meta">
-          🕒 {{ article.created_at.strftime('%Y-%m-%d %H:%M') if article.created_at else '未知時間' }}
+          🕒 {{ article.created_at|to_hk_time('%Y-%m-%d %H:%M') }}
           <br>
           🏷️ ID: {{ article.id }}
         </div>

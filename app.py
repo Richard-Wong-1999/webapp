@@ -6,7 +6,7 @@ Flask AI 趨勢偵測系統 - 重構版
 import os
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, jsonify, request
 from flask_compress import Compress
 
@@ -85,6 +85,23 @@ def tojson_pretty_filter(value):
     try:
         return json.dumps(value, ensure_ascii=False, indent=2)
     except (TypeError, ValueError):
+        return str(value)
+
+
+# 香港時區 (UTC+8)
+HK_TIMEZONE = timezone(timedelta(hours=8))
+
+@app.template_filter('to_hk_time')
+def to_hk_time_filter(value, fmt='%Y-%m-%d %H:%M'):
+    """將 UTC 時間轉換為香港時間 (UTC+8)"""
+    if not value:
+        return '未知時間'
+    try:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        hk_time = value.astimezone(HK_TIMEZONE)
+        return hk_time.strftime(fmt)
+    except (AttributeError, ValueError):
         return str(value)
 
 
