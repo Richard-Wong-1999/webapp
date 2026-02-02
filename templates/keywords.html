@@ -222,19 +222,10 @@
 
       if (trendChartInstance) trendChartInstance.destroy();
 
-      // 計算 12 個月前的日期
-      const now = new Date();
-      const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
-
-      // 過濾只保留最近 12 個月的資料
-      const filtered = monthlySearches.filter(d => {
-        const itemDate = new Date(d.year, d.month - 1, 1);
-        return itemDate >= twelveMonthsAgo;
-      });
-
-      const sorted = [...filtered].sort((a, b) =>
+      // 按日期排序，取最近 12 個月的資料
+      const sorted = [...monthlySearches].sort((a, b) =>
         new Date(a.year, a.month - 1) - new Date(b.year, b.month - 1)
-      );
+      ).slice(-12);  // 取最後 12 筆（最近 12 個月）
 
       const labels = sorted.map(d => `${d.year}/${d.month}`);
       const values = sorted.map(d => d.search_volume || 0);
