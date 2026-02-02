@@ -697,6 +697,62 @@ def api_poe_usage():
     })
 
 
+@app.route("/api/debug/db_status", methods=["GET"])
+def api_debug_db_status():
+    """檢查資料庫狀態（除錯用）"""
+    from services.database import get_db_connection, return_db_connection
+
+    result = {
+        "connection": False,
+        "articles_table_exists": False,
+        "article_count": 0,
+        "columns": [],
+        "error": None
+    }
+
+    conn = get_db_connection()
+    if not conn:
+        result["error"] = "無法連接資料庫"
+        return jsonify(result)
+
+    result["connection"] = True
+
+    try:
+        cur = conn.cursor()
+
+        # 檢查 articles 表是否存在
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'articles'
+            )
+        """)
+        result["articles_table_exists"] = cur.fetchone()[0]
+
+        if result["articles_table_exists"]:
+            # 取得欄位列表
+            cur.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'articles'
+                ORDER BY ordinal_position
+            """)
+            result["columns"] = [row[0] for row in cur.fetchall()]
+
+            # 取得文章數量
+            cur.execute("SELECT COUNT(*) FROM articles")
+            result["article_count"] = cur.fetchone()[0]
+
+        cur.close()
+        return_db_connection(conn)
+
+    except Exception as e:
+        result["error"] = str(e)
+        if conn:
+            return_db_connection(conn)
+
+    return jsonify(result)
+
+
 # ==========================================================
 # 應用啟動
 # ==========================================================
