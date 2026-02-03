@@ -67,17 +67,17 @@ def build_article_prompt(
 
 ## 文章結構要求
 
-### 中文 Blog 文章（繁體中文，280-420字）
+### 中文 Blog 文章（繁體中文）
 1. **標題**：吸引點擊，包含關鍵詞「{main_keyword}」，15-25字
-2. **開頭段**（約80字）：點出主題重要性，吸引讀者繼續閱讀
-3. **主體段**（約200字）：說明要點、政策內容或服務細節，可用條列式增加可讀性
-4. **結尾段**（約80字）：總結重點或呼籲行動
+2. **開頭段**：點出主題重要性，吸引讀者繼續閱讀
+3. **主體段**：說明要點、政策內容或服務細節，可用條列式增加可讀性
+4. **結尾段**：總結重點或呼籲行動
 
-### 英文 Blog 文章（純英文，160-280 words）
+### 英文 Blog 文章（純英文）
 1. **Title**: Engaging blog title, includes keyword, under 70 characters
-2. **Opening** (~50 words): Hook and topic introduction
-3. **Body** (~150 words): Key points and details, can use bullet points
-4. **Closing** (~50 words): Summary or call to action
+2. **Opening**: Hook and topic introduction
+3. **Body**: Key points and details, can use bullet points
+4. **Closing**: Summary or call to action
 
 ## 寫作風格
 - 語調：專業但親切、客觀、關懷長者
