@@ -69,8 +69,8 @@ class Config:
     API_RATE_LIMIT = 0.5  # Calls per second (1 call every 2 seconds)
 
     # Content limits
-    MAX_CHARS_ZH = 3800
-    MAX_CHARS_EN = 4200
+    MAX_CHARS_ZH = 10000
+    MAX_CHARS_EN = 10000
     DEFAULT_RECENT_DAYS = 30
 
     # Crawler settings

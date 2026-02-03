@@ -79,10 +79,15 @@ def split_bilingual_block(block: str) -> Dict[str, str]:
     return {"zh": zh_part, "en": en_part}
 
 
+# 單篇文章最大長度（超過則截斷）
+MAX_SINGLE_ARTICLE_ZH = 10000
+MAX_SINGLE_ARTICLE_EN = 10000
+
+
 def build_reference_content_blocks_flexible(
     blocks: List[str],
-    max_chars_zh: int = 3800,
-    max_chars_en: int = 3800,
+    max_chars_zh: int = 10000,
+    max_chars_en: int = 10000,
     prefer_bilingual: bool = True
 ) -> str:
     """組裝參考內容（不截斷段落，以完整文章為單位）
@@ -105,6 +110,12 @@ def build_reference_content_blocks_flexible(
         parts = split_bilingual_block(b)
         zh_b = parts["zh"].strip()
         en_b = parts["en"].strip()
+
+        # 截斷過長的單篇文章
+        if zh_b and len(zh_b) > MAX_SINGLE_ARTICLE_ZH:
+            zh_b = zh_b[:MAX_SINGLE_ARTICLE_ZH] + "..."
+        if en_b and len(en_b) > MAX_SINGLE_ARTICLE_EN:
+            en_b = en_b[:MAX_SINGLE_ARTICLE_EN] + "..."
 
         if zh_b and en_b:
             bilingual.append((zh_b, en_b))
