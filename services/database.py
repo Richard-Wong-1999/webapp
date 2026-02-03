@@ -8,24 +8,26 @@ from typing import Optional, Dict, List, Any
 from config import Config
 from utils.logger import logger
 
-# 全域連接池
-db_pool: Optional[pool.SimpleConnectionPool] = None
+# 全域連接池（使用 ThreadedConnectionPool 支援多線程）
+db_pool: Optional[pool.ThreadedConnectionPool] = None
 
 
 def init_connection_pool():
-    """初始化資料庫連接池"""
+    """初始化資料庫連接池（線程安全版本）"""
     global db_pool
 
     if db_pool is not None:
         return db_pool
 
     try:
-        db_pool = pool.SimpleConnectionPool(
+        # 使用 ThreadedConnectionPool 而非 SimpleConnectionPool
+        # SimpleConnectionPool 不是線程安全的，會導致多線程存取時阻塞
+        db_pool = pool.ThreadedConnectionPool(
             minconn=Config.DB_POOL_MIN,
             maxconn=Config.DB_POOL_MAX,
             dsn=Config.DATABASE_URL
         )
-        logger.info(f"✅ 資料庫連接池已初始化 (min={Config.DB_POOL_MIN}, max={Config.DB_POOL_MAX})")
+        logger.info(f"✅ 資料庫連接池已初始化 (ThreadedConnectionPool, min={Config.DB_POOL_MIN}, max={Config.DB_POOL_MAX})")
         return db_pool
     except Exception as e:
         logger.error(f"❌ 資料庫連接池初始化失敗：{e}")

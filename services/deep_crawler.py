@@ -477,7 +477,7 @@ class DeepCrawler:
         計算連結相關性分數
 
         評分標準：
-        - 基礎分: 0.5
+        - 基礎分: 0.0
         - +0.4: 關鍵字出現在 URL 中
         - +0.2: 符合優選 URL 模式
         - +0.1: 連結深度不超過父頁面 +1
@@ -493,7 +493,7 @@ class DeepCrawler:
         Returns:
             相關性分數 (0.0 - 1.0)
         """
-        score = 0.5  # 基礎分
+        score = 0.0  # 基礎分改為 0，讓閾值過濾生效
 
         url_lower = url.lower()
         anchor_lower = anchor_text.lower() if anchor_text else ""

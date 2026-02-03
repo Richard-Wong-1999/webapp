@@ -1290,5 +1290,5 @@ if __name__ == "__main__":
     logger.info(f"📂 HA 爬蟲資料夾: {Config.HA_DIR}")
     logger.info("🚀 Flask 應用啟動中...")
 
-    # 啟動 Flask
-    app.run(debug=Config.DEBUG, host='0.0.0.0', port=5000)
+    # 啟動 Flask（啟用多線程以支援背景爬蟲任務）
+    app.run(debug=Config.DEBUG, host='0.0.0.0', port=5000, threaded=True)
