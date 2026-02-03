@@ -164,7 +164,7 @@ def generate_single_article(
     )
 
     # 取得相關參考資料
-    reference_blocks = get_relevant_reference_blocks(
+    reference_blocks = get_relevant_reference_blocks_by_mapping(
         source=source,
         keywords=[main_keyword],
         days=30,
@@ -311,7 +311,7 @@ def generate_single_article_with_seo(
             logger.warning(f"⚠️ 取得 SEO 數據失敗：{e}")
 
     # 取得相關參考資料
-    reference_blocks = get_relevant_reference_blocks(
+    reference_blocks = get_relevant_reference_blocks_by_mapping(
         source=source,
         keywords=[main_keyword],
         days=30,
