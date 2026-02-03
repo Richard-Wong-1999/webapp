@@ -4,12 +4,47 @@
 """
 
 import json
+import re
 import time
 import threading
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+def sanitize_for_postgres(text: str) -> str:
+    """清理字串中 PostgreSQL 不支援的字符（如 NUL 字符）
+
+    Args:
+        text: 原始字串
+
+    Returns:
+        清理後的字串
+    """
+    if not text:
+        return text
+    # 移除 NUL 字符 (\x00, \u0000)
+    return text.replace('\x00', '').replace('\u0000', '')
+
+
+def sanitize_dict_for_postgres(data: Any) -> Any:
+    """遞迴清理字典/列表中所有字串的 NUL 字符
+
+    Args:
+        data: 任意資料結構
+
+    Returns:
+        清理後的資料結構
+    """
+    if isinstance(data, str):
+        return sanitize_for_postgres(data)
+    elif isinstance(data, dict):
+        return {k: sanitize_dict_for_postgres(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [sanitize_dict_for_postgres(item) for item in data]
+    else:
+        return data
 
 from config import Config
 from utils.logger import logger
@@ -318,6 +353,7 @@ def store_scraped_content(data: Dict):
 
     try:
         cur = conn.cursor()
+        # 清理 NUL 字符以避免 PostgreSQL 錯誤
         cur.execute("""
             INSERT INTO seo_scraped_content (
                 url, title, meta_description, main_content, word_count
@@ -332,9 +368,9 @@ def store_scraped_content(data: Dict):
                 scraped_at = CURRENT_TIMESTAMP
         """, (
             data.get("url", ""),
-            data.get("title", ""),
-            data.get("meta_description", ""),
-            data.get("main_content", ""),
+            sanitize_for_postgres(data.get("title", "")),
+            sanitize_for_postgres(data.get("meta_description", "")),
+            sanitize_for_postgres(data.get("main_content", "")),
             data.get("word_count", 0)
         ))
         conn.commit()
@@ -749,16 +785,16 @@ def analyze_keyword_full_with_deep_crawl(
                     max_results=20
                 )
 
-                # 轉換結果格式以匹配原有格式
+                # 轉換結果格式以匹配原有格式（清理 NUL 字符）
                 for page in crawled_pages:
                     content_dict = {
                         "url": page.url,
-                        "title": page.title,
-                        "meta_description": page.meta_description,
-                        "main_content": page.main_content,
+                        "title": sanitize_for_postgres(page.title),
+                        "meta_description": sanitize_for_postgres(page.meta_description),
+                        "main_content": sanitize_for_postgres(page.main_content),
                         "word_count": page.word_count,
                         "success": page.success,
-                        "error": page.error,
+                        "error": sanitize_for_postgres(page.error) if page.error else None,
                         # 新增深度爬取特有欄位
                         "depth": page.depth,
                         "relevance_score": page.relevance_score,
@@ -1350,6 +1386,9 @@ def complete_crawl_task(keyword: str, crawl_result: Dict, error_message: str = N
 
         status = 'failed' if error_message else 'completed'
 
+        # 清理 crawl_result 中的 NUL 字符以避免 PostgreSQL 錯誤
+        sanitized_result = sanitize_dict_for_postgres(crawl_result) if crawl_result else None
+
         cur.execute("""
             UPDATE seo_crawl_tasks
             SET status = %s,
@@ -1359,8 +1398,8 @@ def complete_crawl_task(keyword: str, crawl_result: Dict, error_message: str = N
             WHERE keyword = %s
         """, (
             status,
-            json.dumps(crawl_result, ensure_ascii=False) if crawl_result else None,
-            error_message,
+            json.dumps(sanitized_result, ensure_ascii=False) if sanitized_result else None,
+            sanitize_for_postgres(error_message) if error_message else None,
             keyword
         ))
         conn.commit()
@@ -1556,17 +1595,17 @@ def _execute_crawl_task(keyword: str):
             progress_callback=progress_callback
         )
 
-        # 轉換結果格式
+        # 轉換結果格式（清理 NUL 字符以避免 PostgreSQL 錯誤）
         scraped_content = []
         for page in crawled_pages:
             content_dict = {
                 "url": page.url,
-                "title": page.title,
-                "meta_description": page.meta_description,
-                "main_content": page.main_content,
+                "title": sanitize_for_postgres(page.title),
+                "meta_description": sanitize_for_postgres(page.meta_description),
+                "main_content": sanitize_for_postgres(page.main_content),
                 "word_count": page.word_count,
                 "success": page.success,
-                "error": page.error,
+                "error": sanitize_for_postgres(page.error) if page.error else None,
                 "depth": page.depth,
                 "relevance_score": page.relevance_score,
                 "quality_score": page.quality_score,
