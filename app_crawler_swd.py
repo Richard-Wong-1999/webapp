@@ -201,6 +201,15 @@ def background_crawl_news():
         merged_count = 0
 
         for i, item in enumerate(all_items, start=1):
+            # 檢查是否被停止
+            if not crawl_progress.get("running", True):
+                logger.info("SWD 爬蟲已被用戶停止")
+                crawl_progress.update({
+                    "status": "stopped",
+                    "message": f"已停止。已處理 {i-1}/{total} 筆。"
+                })
+                return
+
             swd_date = item["date"]
             swd_title = item["title"]
             swd_url = item["url"]

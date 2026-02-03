@@ -1295,14 +1295,8 @@ def stop_all_crawls() -> Dict:
 
     logger.info(f"Global crawl stop: {len(stopped_keywords)} memory tasks, {stopped_count} db tasks")
 
-    # 5 秒後重置停止旗標，允許之後啟動新爬蟲
-    def reset_flag():
-        global _global_crawl_stop_flag
-        time.sleep(5)
-        _global_crawl_stop_flag = False
-        logger.info("Crawl stop flag reset")
-
-    threading.Thread(target=reset_flag, daemon=True).start()
+    # 注意：停止旗標會在新爬蟲啟動時自動重置（見 start_keyword_crawl_task）
+    # 移除了原本的 5 秒自動重置，因為在多進程環境下不可靠
 
     return {
         "success": True,
@@ -1545,7 +1539,10 @@ def start_keyword_crawl_task(keyword: str) -> Dict:
             "already_running": bool
         }
     """
-    global _running_crawl_tasks
+    global _running_crawl_tasks, _global_crawl_stop_flag
+
+    # 重置全域停止旗標，允許新爬蟲啟動
+    _global_crawl_stop_flag = False
 
     # 檢查是否有已完成的快取結果
     cached = get_completed_crawl_result(keyword)

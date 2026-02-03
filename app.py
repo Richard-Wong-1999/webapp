@@ -158,6 +158,10 @@ def background_crawl_ha(days=30):
     try:
         os.makedirs(Config.HA_DIR, exist_ok=True)
 
+        # 停止檢查回調
+        def stop_check():
+            return not ha_crawl_progress.running
+
         run_ha_crawl(
             out_dir=Config.HA_DIR,
             days=days,
@@ -167,6 +171,7 @@ def background_crawl_ha(days=30):
             overwrite=True,
             progress_cb=progress_callback,
             enable_debug_html=True,
+            stop_check=stop_check,
         )
 
         # 列出爬取結果
@@ -771,12 +776,43 @@ def get_seo_crawl_result(keyword):
 
 @app.route("/api/seo/stop_all_crawls", methods=["POST"])
 def api_stop_all_crawls():
-    """停止所有正在執行的 SEO 爬蟲任務
+    """停止所有正在執行的爬蟲任務（SEO、SWD、HA）
 
     用於緊急停止所有爬蟲，例如重啟前或資源不足時。
     """
     try:
-        result = stop_all_crawls()
+        stopped_count = 0
+        messages = []
+
+        # 1. 停止 SEO 爬蟲
+        seo_result = stop_all_crawls()
+        stopped_count += seo_result.get("stopped_count", 0)
+        if seo_result.get("stopped_count", 0) > 0:
+            messages.append(f"SEO: {seo_result.get('stopped_count', 0)}")
+
+        # 2. 停止 SWD 爬蟲
+        if crawl_progress.get("running"):
+            crawl_progress["running"] = False
+            crawl_progress["status"] = "stopped"
+            crawl_progress["message"] = "手動停止"
+            stopped_count += 1
+            messages.append("SWD: 1")
+            logger.info("SWD crawl stopped by user")
+
+        # 3. 停止 HA 爬蟲
+        if ha_crawl_progress.running:
+            ha_crawl_progress.running = False
+            ha_crawl_progress.status = "stopped"
+            ha_crawl_progress.message = "手動停止"
+            stopped_count += 1
+            messages.append("HA: 1")
+            logger.info("HA crawl stopped by user")
+
+        result = {
+            "success": True,
+            "stopped_count": stopped_count,
+            "message": f"已停止 {stopped_count} 個爬蟲任務" + (f" ({', '.join(messages)})" if messages else "")
+        }
         logger.info(f"Stop all crawls: {result}")
         return jsonify(result)
     except Exception as e:

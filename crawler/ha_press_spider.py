@@ -444,6 +444,7 @@ def run_ha_crawl(
     overwrite: bool = True,
     progress_cb: ProgressCb = None,
     enable_debug_html: bool = True,
+    stop_check: Optional[Callable[[], bool]] = None,
 ) -> dict:
     """
     供 Flask 呼叫的 HA 爬蟲。
@@ -490,6 +491,17 @@ def run_ha_crawl(
     results: list[Result] = []
 
     for i, it in enumerate(items, start=1):
+        # 檢查是否被停止
+        if stop_check and stop_check():
+            report({
+                "status": "stopped",
+                "phase": "download",
+                "total": len(items),
+                "completed": i - 1,
+                "message": f"已停止。已處理 {i-1}/{len(items)} 筆。",
+            })
+            return {"count": i - 1, "out_dir": str(out_dir), "stopped": True}
+
         report(
             {
                 "status": "running",
