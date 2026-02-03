@@ -108,6 +108,14 @@ class Config:
     # 香港位置代碼（DataForSEO）
     HK_LOCATION_CODE = 2344
 
+    # 分層摘要設定
+    HIERARCHICAL_SUMMARY_ENABLED = True       # 是否啟用分層摘要
+    HIERARCHICAL_SUMMARY_THRESHOLD = 5        # 超過多少頁才啟用分層摘要
+    DOMAIN_SUMMARY_MAX_LENGTH = 800           # 每個域名摘要最大長度（字）
+    DOMAIN_SUMMARY_MODEL = "deepseek-chat"    # 摘要用的模型
+    DOMAIN_SUMMARY_MAX_WORKERS = 3            # 並行生成摘要的最大線程數
+    DOMAIN_SUMMARY_CACHE_TTL = 21600          # 域名摘要快取 TTL（6小時，與 SERP 快取相同）
+
     @classmethod
     def validate(cls):
         """驗證必要的配置是否存在"""

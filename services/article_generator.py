@@ -18,7 +18,13 @@ from services.keyword_extractor import (
 )
 from services.database import insert_article
 from models import ProgressTracker
-from services.seo_orchestrator import analyze_keyword_full, prepare_seo_context_for_prompt
+from services.seo_orchestrator import (
+    analyze_keyword_full,
+    analyze_keyword_full_with_deep_crawl,
+    prepare_seo_context_for_prompt,
+    prepare_deep_crawl_context_for_prompt,
+    generate_hierarchical_summary
+)
 from services.dataforseo_client import dataforseo_client
 
 # 全域進度追蹤器
@@ -270,6 +276,131 @@ def build_seo_prompt_section(seo_context: str) -> str:
 """
 
 
+def build_hierarchical_reference_section(
+    hierarchical_summary: str,
+    seo_analysis: dict,
+    keyword: str
+) -> str:
+    """構建基於分層摘要的參考資料區塊
+
+    Args:
+        hierarchical_summary: generate_hierarchical_summary 返回的合併摘要
+        seo_analysis: analyze_keyword_full_with_deep_crawl 的結果
+        keyword: 關鍵字
+
+    Returns:
+        格式化的參考資料區塊
+    """
+    sections = []
+
+    # 添加 SEO 指標
+    keyword_data = seo_analysis.get("keyword_data", {})
+    if keyword_data:
+        search_volume = keyword_data.get("search_volume", 0)
+        cpc = keyword_data.get("cpc", 0)
+        competition_level = keyword_data.get("competition_level", "N/A")
+
+        sections.append(f"""## SEO 關鍵字指標
+- 月搜尋量：{search_volume:,}
+- 平均 CPC：${cpc:.2f}
+- 競爭程度：{competition_level}""")
+
+    # 添加相關關鍵字
+    related_keywords = keyword_data.get("related_keywords", [])[:10]
+    if related_keywords:
+        related_list = ", ".join([k.get("keyword", "") for k in related_keywords if k.get("keyword")])
+        sections.append(f"""## 相關關鍵字（可作為長尾關鍵字）
+{related_list}""")
+
+    # 用戶常問問題
+    serp = seo_analysis.get("serp", {})
+    people_also_ask = serp.get("people_also_ask", [])
+    if people_also_ask:
+        questions = []
+        for paa in people_also_ask[:5]:
+            q = paa.get("question", "")
+            if q:
+                questions.append(f"- {q}")
+        if questions:
+            sections.append(f"""## 用戶常問問題（建議在文章中回答）
+{chr(10).join(questions)}""")
+
+    # 相關搜尋
+    related_searches = serp.get("related_searches", [])
+    if related_searches:
+        searches = ", ".join(related_searches[:8])
+        sections.append(f"""## 相關搜尋詞
+{searches}""")
+
+    # 分層摘要（核心內容）
+    if hierarchical_summary:
+        sections.append(f"""## 競爭對手分析摘要（基於 {len(seo_analysis.get('scraped_content', []))} 頁深度爬取）
+
+以下是各競爭網站的關鍵內容摘要：
+
+{hierarchical_summary}""")
+
+    # 深度爬取統計
+    deep_stats = seo_analysis.get("deep_crawl_stats")
+    if deep_stats:
+        sections.append(f"""## 深度爬取統計
+- 總爬取頁面：{deep_stats.get('total_pages_crawled', 0)}
+- 涵蓋域名數：{deep_stats.get('unique_domains', 0)}
+- SERP 頁面：{deep_stats.get('depth_0_count', 0)}
+- 內部連結頁面：{deep_stats.get('depth_1_count', 0)}""")
+
+    return "\n\n".join(sections) if sections else ""
+
+
+def build_serp_reference_with_hierarchical_summary(
+    scraped_content: list,
+    keyword: str,
+    seo_analysis: dict = None
+) -> str:
+    """智能構建 SERP 參考資料（自動選擇是否使用分層摘要）
+
+    當爬取頁面數量超過閾值時，使用分層摘要；否則使用原始截斷方法。
+
+    Args:
+        scraped_content: 爬取的頁面列表
+        keyword: 關鍵字
+        seo_analysis: 完整的 SEO 分析結果（可選）
+
+    Returns:
+        格式化的參考資料字串
+    """
+    if not scraped_content:
+        return "（無可用的搜尋結果參考資料）"
+
+    # 檢查是否啟用分層摘要
+    hierarchical_enabled = getattr(Config, 'HIERARCHICAL_SUMMARY_ENABLED', True)
+    threshold = getattr(Config, 'HIERARCHICAL_SUMMARY_THRESHOLD', 5)
+
+    if hierarchical_enabled and len(scraped_content) > threshold:
+        # 使用分層摘要
+        logger.info(f"Using hierarchical summary for {len(scraped_content)} pages (threshold: {threshold})")
+
+        hierarchical_summary = generate_hierarchical_summary(scraped_content, keyword)
+
+        if hierarchical_summary and seo_analysis:
+            return build_hierarchical_reference_section(
+                hierarchical_summary,
+                seo_analysis,
+                keyword
+            )
+        elif hierarchical_summary:
+            # 只有摘要，沒有其他 SEO 數據
+            return f"""## 競爭對手分析摘要
+
+以下是各競爭網站的關鍵內容摘要：
+
+{hierarchical_summary}"""
+
+    # 回退到原始方法（截斷內容）
+    logger.info(f"Using traditional truncation for {len(scraped_content)} pages")
+    return build_serp_reference_section(scraped_content, max_items=10)
+
+
 def generate_single_article_with_seo(
     article_index: int,
     main_keyword: str,
@@ -432,17 +563,26 @@ def generate_single_article_by_source(
         reference_section_title = "📰 參考新聞資料（中英並列）"
     else:
         # 使用 SERP 爬蟲內容作為參考（SEO/Trends 關鍵字）
-        logger.info(f"🔍 正在取得「{main_keyword}」的 SERP 數據...")
+        logger.info(f"🔍 正在取得「{main_keyword}」的 SERP 數據（啟用深度爬取）...")
 
         if dataforseo_client.is_configured():
             try:
-                seo_result = analyze_keyword_full(main_keyword, skip_scraping=False)
+                # 使用深度爬取獲取更多內容
+                deep_crawl_enabled = getattr(Config, 'DEEP_CRAWL_ENABLED', True)
+                seo_result = analyze_keyword_full_with_deep_crawl(
+                    main_keyword,
+                    deep_crawl_enabled=deep_crawl_enabled
+                )
                 scraped_content = seo_result.get("scraped_content", [])
 
                 if scraped_content:
-                    # 改為 10 篇參考資料
-                    reference_content = build_serp_reference_section(scraped_content, max_items=10)
-                    logger.info(f"✅ 成功取得「{main_keyword}」的 SERP 爬蟲內容（{len(scraped_content)} 個網站）")
+                    # 使用智能參考資料構建（自動選擇分層摘要或截斷）
+                    reference_content = build_serp_reference_with_hierarchical_summary(
+                        scraped_content,
+                        main_keyword,
+                        seo_analysis=seo_result
+                    )
+                    logger.info(f"✅ 成功取得「{main_keyword}」的深度爬蟲內容（{len(scraped_content)} 個頁面）")
                 else:
                     reference_content = fallback_content
                     logger.warning(f"⚠️ 「{main_keyword}」SERP 爬蟲無內容，使用備用內容")
@@ -453,7 +593,7 @@ def generate_single_article_by_source(
             logger.warning("⚠️ DataForSEO API 未配置，使用備用內容")
             reference_content = fallback_content
 
-        reference_section_title = "🌐 網路搜尋結果參考"
+        reference_section_title = "🌐 競爭對手深度分析"
 
     # 生成 prompt（使用統一模板）
     prompt_zh = build_article_prompt(

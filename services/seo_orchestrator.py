@@ -7,6 +7,8 @@ import json
 import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional
+from urllib.parse import urlparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from config import Config
 from utils.logger import logger
@@ -929,3 +931,269 @@ def prepare_deep_crawl_context_for_prompt(
 {chr(10).join(competitor_sections)}""")
 
     return "\n\n".join(sections) if sections else ""
+
+
+# ========== 分層摘要功能 ==========
+
+def group_by_domain(scraped_content: List[Dict]) -> Dict[str, List[Dict]]:
+    """將爬取內容按域名分組
+
+    Args:
+        scraped_content: 爬取的頁面列表
+
+    Returns:
+        按域名分組的字典 {domain: [pages]}
+    """
+    domain_groups = {}
+
+    for page in scraped_content:
+        url = page.get("url", "")
+        if not url:
+            continue
+
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc
+            if domain:
+                if domain not in domain_groups:
+                    domain_groups[domain] = []
+                domain_groups[domain].append(page)
+        except Exception as e:
+            logger.warning(f"Failed to parse URL {url}: {e}")
+            continue
+
+    return domain_groups
+
+
+def get_cached_domain_summary(keyword: str, domain: str) -> Optional[str]:
+    """檢查是否有快取的域名摘要
+
+    Args:
+        keyword: 關鍵字
+        domain: 域名
+
+    Returns:
+        快取的摘要文本，或 None
+    """
+    conn = get_db_connection()
+    if not conn:
+        return None
+
+    try:
+        cur = conn.cursor()
+        ttl = getattr(Config, 'DOMAIN_SUMMARY_CACHE_TTL', 21600)
+
+        cur.execute("""
+            SELECT summary
+            FROM seo_domain_summary
+            WHERE keyword = %s AND domain = %s
+              AND created_at > NOW() - INTERVAL '1 second' * %s
+        """, (keyword, domain, ttl))
+
+        row = cur.fetchone()
+        cur.close()
+        return_db_connection(conn)
+
+        if row:
+            logger.info(f"Cache hit for domain summary: {domain} (keyword: {keyword})")
+            return row[0]
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting cached domain summary: {e}")
+        if conn:
+            return_db_connection(conn)
+        return None
+
+
+def store_domain_summary(keyword: str, domain: str, summary: str, urls: List[str]):
+    """儲存域名摘要到快取
+
+    Args:
+        keyword: 關鍵字
+        domain: 域名
+        summary: 生成的摘要
+        urls: 來源 URL 列表
+    """
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO seo_domain_summary (keyword, domain, summary, page_count, source_urls)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (keyword, domain)
+            DO UPDATE SET
+                summary = EXCLUDED.summary,
+                page_count = EXCLUDED.page_count,
+                source_urls = EXCLUDED.source_urls,
+                created_at = CURRENT_TIMESTAMP
+        """, (
+            keyword,
+            domain,
+            summary,
+            len(urls),
+            json.dumps(urls, ensure_ascii=False)
+        ))
+        conn.commit()
+        cur.close()
+        return_db_connection(conn)
+        logger.info(f"Stored domain summary for {domain} (keyword: {keyword})")
+
+    except Exception as e:
+        logger.error(f"Error storing domain summary: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        if conn:
+            return_db_connection(conn)
+
+
+def summarize_domain_content(
+    domain: str,
+    pages: List[Dict],
+    keyword: str,
+    max_content_per_page: int = 3000
+) -> str:
+    """為單一域名的所有頁面生成摘要
+
+    Args:
+        domain: 域名
+        pages: 該域名的頁面列表
+        keyword: 關鍵字
+        max_content_per_page: 每個頁面內容的最大字數
+
+    Returns:
+        生成的摘要文本
+    """
+    from services.deepseek_client import call_deepseek
+
+    # 檢查快取
+    cached = get_cached_domain_summary(keyword, domain)
+    if cached:
+        return cached
+
+    # 構建頁面內容
+    page_contents = []
+    urls = []
+
+    for i, page in enumerate(pages[:5], 1):  # 每個域名最多取 5 頁
+        title = page.get("title", "無標題")
+        content = page.get("main_content", "")
+        url = page.get("url", "")
+
+        if content:
+            # 截斷內容
+            if len(content) > max_content_per_page:
+                content = content[:max_content_per_page] + "..."
+
+            page_contents.append(f"[頁面{i}: {title}]\n{content}")
+            urls.append(url)
+
+    if not page_contents:
+        return ""
+
+    combined_content = "\n\n---\n\n".join(page_contents)
+
+    # 構建摘要 prompt
+    prompt = f"""你是一位 SEO 內容分析專家。請分析以下來自同一網站的多個頁面，提取與「{keyword}」相關的重要資訊。
+
+網站來源：{domain}
+頁面數量：{len(page_contents)}
+
+---
+{combined_content}
+---
+
+請提取並輸出以下內容（用繁體中文）：
+
+1. **核心觀點**：該網站對「{keyword}」的主要論述（2-3 句）
+2. **關鍵數據**：具體數字、統計、日期等不可遺漏的資訊（列表）
+3. **獨特見解**：其他競爭對手可能沒有提到的觀點
+4. **實用建議**：對讀者有價值的具體建議
+
+請用 400-600 字輸出結構化摘要，保留重要細節但去除冗餘資訊。"""
+
+    try:
+        summary = call_deepseek(prompt)
+        if summary:
+            # 儲存到快取
+            store_domain_summary(keyword, domain, summary, urls)
+            logger.info(f"Generated summary for domain {domain} ({len(pages)} pages)")
+            return summary
+        else:
+            logger.warning(f"Empty summary returned for domain {domain}")
+            return ""
+    except Exception as e:
+        logger.error(f"Failed to summarize domain {domain}: {e}")
+        return ""
+
+
+def generate_hierarchical_summary(
+    scraped_content: List[Dict],
+    keyword: str
+) -> str:
+    """分層摘要處理所有爬蟲數據
+
+    採用 Map-Reduce 模式：
+    1. Map 階段：按域名分組，並行生成每個域名的摘要
+    2. Reduce 階段：合併所有摘要
+
+    Args:
+        scraped_content: 爬取的頁面列表
+        keyword: 關鍵字
+
+    Returns:
+        合併後的摘要文本
+    """
+    # 1. 按域名分組
+    domain_groups = group_by_domain(scraped_content)
+
+    if not domain_groups:
+        logger.warning("No domain groups found for hierarchical summary")
+        return ""
+
+    logger.info(f"Hierarchical summary: {len(domain_groups)} domains, {len(scraped_content)} total pages")
+
+    # 2. 並行生成各域名摘要 (Map 階段)
+    summaries = {}
+    max_workers = getattr(Config, 'DOMAIN_SUMMARY_MAX_WORKERS', 3)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(summarize_domain_content, domain, pages, keyword): domain
+            for domain, pages in domain_groups.items()
+        }
+
+        for future in as_completed(futures):
+            domain = futures[future]
+            try:
+                result = future.result()
+                if result:
+                    summaries[domain] = result
+                    logger.info(f"Completed summary for domain: {domain}")
+            except Exception as e:
+                logger.warning(f"Failed to summarize {domain}: {e}")
+                # 跳過失敗的域名，繼續處理其他域名
+                continue
+
+    if not summaries:
+        logger.warning("No summaries generated in hierarchical summary")
+        return ""
+
+    # 3. 合併摘要 (Reduce 階段)
+    combined_sections = []
+    for i, (domain, summary) in enumerate(summaries.items(), 1):
+        page_count = len(domain_groups.get(domain, []))
+        combined_sections.append(f"""### 來源 {i}: {domain}（{page_count} 頁）
+{summary}
+""")
+
+    combined_summary = "\n".join(combined_sections)
+
+    logger.info(f"Hierarchical summary completed: {len(summaries)} domain summaries generated")
+
+    return combined_summary

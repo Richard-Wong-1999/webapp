@@ -103,7 +103,8 @@ def ensure_database_initialized():
             'seo_keyword_data',
             'seo_trends_data',
             'seo_serp_cache',
-            'seo_scraped_content'
+            'seo_scraped_content',
+            'seo_domain_summary'
         ]
 
         cur.execute("""
@@ -256,6 +257,24 @@ def init_database():
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_seo_scraped_scraped_at
             ON seo_scraped_content(scraped_at DESC)
+        """)
+
+        # 域名摘要快取（用於分層摘要）
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS seo_domain_summary (
+                id SERIAL PRIMARY KEY,
+                keyword VARCHAR(500) NOT NULL,
+                domain VARCHAR(500) NOT NULL,
+                summary TEXT NOT NULL,
+                page_count INTEGER,
+                source_urls JSONB,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(keyword, domain)
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_domain_summary_keyword
+            ON seo_domain_summary(keyword)
         """)
 
         conn.commit()
