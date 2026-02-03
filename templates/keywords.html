@@ -1327,6 +1327,14 @@
           return;
         }
 
+        // 檢查是否有正在執行的 SEO 爬蟲
+        const runningCrawls = Object.keys(seoCrawlPollers);
+        if (runningCrawls.length > 0) {
+          e.preventDefault();
+          alert('請等待 SEO 爬蟲完成後再生成文章：\n\n' + runningCrawls.join('\n'));
+          return;
+        }
+
         // 構建關鍵字來源映射
         const sourcesMap = {};
         const sourceCount = { swd: 0, ha: 0, seo: 0 };
