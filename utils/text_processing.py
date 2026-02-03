@@ -125,25 +125,13 @@ def build_reference_content_blocks_flexible(
     ordered = (bilingual + monolingual) if prefer_bilingual else (bilingual + monolingual)
 
     zh_out, en_out = [], []
-    zh_len = 0
-    en_len = 0
 
     for zh_b, en_b in ordered:
-        add_zh = len(zh_b) + 5 if zh_b else 0
-        add_en = len(en_b) + 5 if en_b else 0
-
-        # 單語篇只檢查自己的上限；雙語篇需同時滿足
-        if zh_b and (zh_len + add_zh > max_chars_zh):
-            continue
-        if en_b and (en_len + add_en > max_chars_en):
-            continue
-
+        # 直接添加所有文章（已在前面截斷過長文章）
         if zh_b:
             zh_out.append(zh_b)
-            zh_len += add_zh
         if en_b:
             en_out.append(en_b)
-            en_len += add_en
 
     # 以「ZH references」+「EN references」兩區塊輸出
     content_parts = []
