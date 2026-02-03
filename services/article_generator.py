@@ -13,7 +13,8 @@ from services.deepseek_client import call_deepseek
 from services.llm_client import call_llm, get_current_model, accumulate_poe_points
 from services.keyword_extractor import (
     get_recent_articles_text,
-    get_relevant_reference_blocks
+    get_relevant_reference_blocks,
+    get_relevant_reference_blocks_by_mapping
 )
 from services.database import insert_article
 from models import ProgressTracker
@@ -404,8 +405,8 @@ def generate_single_article_by_source(
 
     # 根據來源類型決定參考資料
     if effective_source in ('swd', 'ha'):
-        # 使用新聞稿作為參考
-        reference_blocks = get_relevant_reference_blocks(
+        # 使用新聞稿作為參考（優先使用關鍵字映射）
+        reference_blocks = get_relevant_reference_blocks_by_mapping(
             source=effective_source,
             keywords=[main_keyword],
             days=30,
