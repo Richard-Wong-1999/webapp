@@ -38,7 +38,10 @@ from services.seo_orchestrator import (
     analyze_keyword_full,
     prepare_seo_context_for_prompt,
     get_seo_analysis_progress,
-    seo_analysis_progress
+    seo_analysis_progress,
+    start_keyword_crawl_task,
+    get_crawl_task_progress,
+    get_completed_crawl_result
 )
 from services.dataforseo_client import dataforseo_client
 from services.article_generator import (
@@ -71,6 +74,10 @@ app.config.from_object(Config)
 
 # 啟用壓縮
 Compress(app)
+
+# 初始化資料庫（在 module load 時執行，支援 gunicorn）
+init_connection_pool()
+ensure_database_initialized()
 
 # ==========================================================
 # ✅ 註冊 Jinja2 過濾器
@@ -670,6 +677,95 @@ def seo_api_status():
         "configured": dataforseo_client.is_configured(),
         "message": "DataForSEO API 已配置" if dataforseo_client.is_configured() else "DataForSEO API 未配置"
     })
+
+
+# ==========================================================
+# 路由：SEO 預爬蟲功能
+# ==========================================================
+@app.route("/api/seo/start_crawl", methods=["POST"])
+def start_seo_crawl():
+    """啟動 SEO 關鍵字爬蟲任務
+
+    在用戶選擇 SEO 關鍵字時立即啟動背景爬蟲，
+    爬取結果會快取到資料庫供文章生成時使用。
+    """
+    try:
+        data = request.get_json()
+        keyword = data.get("keyword", "").strip()
+
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"}), 400
+
+        if not dataforseo_client.is_configured():
+            return jsonify({
+                "success": False,
+                "message": "DataForSEO API 未配置"
+            }), 500
+
+        # 啟動爬蟲任務
+        result = start_keyword_crawl_task(keyword)
+
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"Start SEO crawl error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route("/api/seo/crawl_progress/<path:keyword>", methods=["GET"])
+def get_seo_crawl_progress(keyword):
+    """取得 SEO 爬蟲任務進度
+
+    前端輪詢此端點以獲取爬蟲進度，用於更新進度條 UI。
+    """
+    try:
+        keyword = keyword.strip()
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"}), 400
+
+        progress = get_crawl_task_progress(keyword)
+
+        return jsonify({
+            "success": True,
+            **progress
+        })
+
+    except Exception as e:
+        logger.error(f"Get SEO crawl progress error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route("/api/seo/crawl_result/<path:keyword>", methods=["GET"])
+def get_seo_crawl_result(keyword):
+    """取得 SEO 爬蟲結果（從快取）
+
+    用於文章生成時直接取得預爬蟲的結果。
+    """
+    try:
+        keyword = keyword.strip()
+        if not keyword:
+            return jsonify({"success": False, "message": "請提供關鍵字"}), 400
+
+        # 取得快取的爬蟲結果（預設 1 小時內有效）
+        max_age = request.args.get("max_age", 3600, type=int)
+        result = get_completed_crawl_result(keyword, max_age_seconds=max_age)
+
+        if result:
+            return jsonify({
+                "success": True,
+                "cached": True,
+                "data": result
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "cached": False,
+                "message": "無快取結果或結果已過期"
+            })
+
+    except Exception as e:
+        logger.error(f"Get SEO crawl result error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 # ==========================================================

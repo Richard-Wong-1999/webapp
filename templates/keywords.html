@@ -201,6 +201,63 @@
           </div>
         </div>
 
+        <!-- 爬蟲進度條樣式 -->
+        <style>
+          .crawl-progress-inline {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            font-size: 12px;
+          }
+          .crawl-progress-bar-container {
+            width: 80px;
+            height: 14px;
+            background: #e0e0e0;
+            border-radius: 7px;
+            overflow: hidden;
+            position: relative;
+          }
+          .crawl-progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4caf50, #8bc34a);
+            transition: width 0.3s ease;
+            border-radius: 7px;
+          }
+          .crawl-progress-text {
+            color: #666;
+            white-space: nowrap;
+          }
+          .crawl-status-completed {
+            color: #4caf50;
+            font-weight: bold;
+          }
+          .crawl-status-pending {
+            color: #999;
+          }
+          .crawl-status-failed {
+            color: #f44336;
+          }
+          .keyword-item-enhanced {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 4px;
+          }
+          .keyword-item-enhanced .keyword-text {
+            flex: 1;
+            min-width: 0;
+          }
+          .keyword-item-enhanced .keyword-metrics {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+          }
+        </style>
+
         <!-- 生成按鈕區 -->
         <div class="generate-actions">
           <button type="submit" id="btnGenerate">
@@ -658,6 +715,198 @@
     function addSuggestionToList(keyword) {
       const metrics = window.seoSuggestionMetrics && window.seoSuggestionMetrics[keyword];
       addSeoKeywordToList(keyword, metrics || {});
+
+      // 立即啟動預爬蟲
+      startKeywordCrawl(keyword);
+    }
+
+    // ============================================================
+    // SEO 預爬蟲功能
+    // ============================================================
+    const seoCrawlPollers = {};  // 追蹤每個關鍵字的輪詢 interval
+    const SEO_CRAWL_STATUS_KEY = 'seo_crawl_status';
+
+    // 儲存爬蟲狀態到 localStorage
+    function saveCrawlStatusToStorage() {
+      try {
+        const status = {};
+        Object.keys(seoCrawlPollers).forEach(kw => {
+          status[kw] = 'polling';
+        });
+        localStorage.setItem(SEO_CRAWL_STATUS_KEY, JSON.stringify(status));
+      } catch (e) {
+        console.warn('[Crawl] 無法儲存狀態到 localStorage:', e);
+      }
+    }
+
+    // 啟動單個關鍵字的爬蟲
+    async function startKeywordCrawl(keyword) {
+      console.log(`[Crawl] 啟動爬蟲: ${keyword}`);
+
+      // 如果已經在輪詢中，跳過
+      if (seoCrawlPollers[keyword]) {
+        console.log(`[Crawl] ${keyword} 已在輪詢中`);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/seo/start_crawl', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keyword })
+        });
+
+        const data = await res.json();
+        console.log(`[Crawl] 啟動結果:`, data);
+
+        if (data.success) {
+          if (data.status === 'completed' && data.cached) {
+            // 已有快取結果，直接顯示完成
+            updateKeywordCrawlUI(keyword, {
+              status: 'completed',
+              pages_crawled: 30,
+              total_pages: 30
+            });
+          } else if (data.status === 'running') {
+            // 開始輪詢進度
+            updateKeywordCrawlUI(keyword, {
+              status: 'running',
+              pages_crawled: 0,
+              total_pages: 30
+            });
+            pollCrawlProgress(keyword);
+          }
+        } else {
+          console.error(`[Crawl] 啟動失敗: ${data.message}`);
+          updateKeywordCrawlUI(keyword, {
+            status: 'failed',
+            error_message: data.message
+          });
+        }
+      } catch (e) {
+        console.error(`[Crawl] 啟動錯誤:`, e);
+        updateKeywordCrawlUI(keyword, {
+          status: 'failed',
+          error_message: e.message
+        });
+      }
+    }
+
+    // 輪詢爬蟲進度
+    function pollCrawlProgress(keyword) {
+      if (seoCrawlPollers[keyword]) {
+        clearInterval(seoCrawlPollers[keyword]);
+      }
+
+      const poll = async () => {
+        try {
+          const res = await fetch(`/api/seo/crawl_progress/${encodeURIComponent(keyword)}`);
+          const data = await res.json();
+
+          if (data.success) {
+            updateKeywordCrawlUI(keyword, data);
+
+            // 如果完成或失敗，停止輪詢
+            if (data.status === 'completed' || data.status === 'failed') {
+              clearInterval(seoCrawlPollers[keyword]);
+              delete seoCrawlPollers[keyword];
+              saveCrawlStatusToStorage();
+              console.log(`[Crawl] ${keyword} 爬蟲結束: ${data.status}`);
+            }
+          }
+        } catch (e) {
+          console.error(`[Crawl] 輪詢錯誤:`, e);
+        }
+      };
+
+      // 立即執行一次
+      poll();
+
+      // 然後每 2 秒輪詢一次
+      seoCrawlPollers[keyword] = setInterval(poll, 2000);
+      saveCrawlStatusToStorage();
+    }
+
+    // 更新關鍵字項目的爬蟲進度 UI
+    function updateKeywordCrawlUI(keyword, progress) {
+      const keywordArea = document.getElementById('keywordArea');
+      if (!keywordArea) return;
+
+      // 找到對應的關鍵字項目
+      const checkbox = keywordArea.querySelector(`input[value="${escapeHtml(keyword)}"][data-source="seo"]`);
+      if (!checkbox) return;
+
+      const item = checkbox.closest('.keyword-item-enhanced');
+      if (!item) return;
+
+      // 找到或創建進度區域
+      let progressContainer = item.querySelector('.crawl-progress-inline');
+      if (!progressContainer) {
+        progressContainer = document.createElement('div');
+        progressContainer.className = 'crawl-progress-inline';
+        progressContainer.setAttribute('data-keyword', keyword);
+        item.appendChild(progressContainer);
+      }
+
+      const status = progress.status || 'pending';
+      const pagesCrawled = progress.pages_crawled || 0;
+      const totalPages = progress.total_pages || 30;
+      const percent = Math.round((pagesCrawled / totalPages) * 100);
+
+      if (status === 'completed') {
+        progressContainer.innerHTML = `
+          <span class="crawl-status-completed">✓ 已預載</span>
+        `;
+      } else if (status === 'failed') {
+        progressContainer.innerHTML = `
+          <span class="crawl-status-failed">✗ 失敗</span>
+        `;
+      } else if (status === 'running') {
+        progressContainer.innerHTML = `
+          <div class="crawl-progress-bar-container">
+            <div class="crawl-progress-bar-fill" style="width: ${percent}%"></div>
+          </div>
+          <span class="crawl-progress-text">${pagesCrawled}/${totalPages}</span>
+        `;
+      } else if (status === 'pending' || status === 'not_found') {
+        progressContainer.innerHTML = `
+          <span class="crawl-status-pending">等待中...</span>
+        `;
+      }
+    }
+
+    // 頁面載入時恢復爬蟲進度
+    async function restoreCrawlProgress() {
+      console.log('[Crawl] 恢復爬蟲進度...');
+
+      // 找出所有已選的 SEO 關鍵字
+      const keywordArea = document.getElementById('keywordArea');
+      if (!keywordArea) return;
+
+      const seoCheckboxes = keywordArea.querySelectorAll('input[data-source="seo"]:checked');
+      const seoKeywords = Array.from(seoCheckboxes).map(cb => cb.value);
+
+      console.log(`[Crawl] 找到 ${seoKeywords.length} 個已選 SEO 關鍵字`);
+
+      // 檢查每個關鍵字的爬蟲狀態
+      for (const keyword of seoKeywords) {
+        try {
+          const res = await fetch(`/api/seo/crawl_progress/${encodeURIComponent(keyword)}`);
+          const data = await res.json();
+
+          if (data.success) {
+            updateKeywordCrawlUI(keyword, data);
+
+            // 如果正在執行中，恢復輪詢
+            if (data.status === 'running') {
+              console.log(`[Crawl] 恢復輪詢: ${keyword}`);
+              pollCrawlProgress(keyword);
+            }
+          }
+        } catch (e) {
+          console.warn(`[Crawl] 檢查 ${keyword} 狀態失敗:`, e);
+        }
+      }
     }
 
     // ============================================================
@@ -1018,6 +1267,11 @@
 
       // 載入所有關鍵字（SWD + HA）
       await loadAllKeywords();
+
+      // 恢復 SEO 關鍵字的爬蟲進度（需要在關鍵字載入後）
+      setTimeout(() => {
+        restoreCrawlProgress();
+      }, 500);
 
       // 檢查爬蟲狀態
       try {

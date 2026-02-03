@@ -5,6 +5,7 @@
 
 import json
 import time
+import threading
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlparse
@@ -1197,3 +1198,429 @@ def generate_hierarchical_summary(
     logger.info(f"Hierarchical summary completed: {len(summaries)} domain summaries generated")
 
     return combined_summary
+
+
+# ========== SEO 預爬蟲任務管理 ==========
+
+# 用於追蹤正在執行的爬蟲任務（避免重複啟動）
+_running_crawl_tasks: Dict[str, bool] = {}
+_crawl_tasks_lock = threading.Lock()
+
+
+def get_crawl_task_status(keyword: str) -> Optional[Dict]:
+    """從資料庫取得爬蟲任務狀態
+
+    Args:
+        keyword: 關鍵字
+
+    Returns:
+        任務狀態字典，或 None（不存在）
+    """
+    conn = get_db_connection()
+    if not conn:
+        return None
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT keyword, status, pages_crawled, total_pages, current_url,
+                   error_message, started_at, completed_at, created_at
+            FROM seo_crawl_tasks
+            WHERE keyword = %s
+        """, (keyword,))
+
+        row = cur.fetchone()
+        cur.close()
+        return_db_connection(conn)
+
+        if row:
+            return {
+                "keyword": row[0],
+                "status": row[1],
+                "pages_crawled": row[2] or 0,
+                "total_pages": row[3] or 30,
+                "current_url": row[4] or "",
+                "error_message": row[5] or "",
+                "started_at": row[6].isoformat() if row[6] else None,
+                "completed_at": row[7].isoformat() if row[7] else None,
+                "created_at": row[8].isoformat() if row[8] else None
+            }
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting crawl task status: {e}")
+        if conn:
+            return_db_connection(conn)
+        return None
+
+
+def create_or_reset_crawl_task(keyword: str, total_pages: int = 30) -> bool:
+    """創建或重置爬蟲任務
+
+    Args:
+        keyword: 關鍵字
+        total_pages: 預計爬取的總頁數
+
+    Returns:
+        是否成功
+    """
+    conn = get_db_connection()
+    if not conn:
+        return False
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO seo_crawl_tasks (keyword, status, pages_crawled, total_pages, started_at)
+            VALUES (%s, 'running', 0, %s, NOW())
+            ON CONFLICT (keyword)
+            DO UPDATE SET
+                status = 'running',
+                pages_crawled = 0,
+                total_pages = EXCLUDED.total_pages,
+                current_url = NULL,
+                crawl_result = NULL,
+                error_message = NULL,
+                started_at = NOW(),
+                completed_at = NULL
+        """, (keyword, total_pages))
+        conn.commit()
+        cur.close()
+        return_db_connection(conn)
+        return True
+
+    except Exception as e:
+        logger.error(f"Error creating/resetting crawl task: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        if conn:
+            return_db_connection(conn)
+        return False
+
+
+def update_crawl_task_progress(keyword: str, pages_crawled: int, current_url: str):
+    """更新爬蟲任務進度
+
+    Args:
+        keyword: 關鍵字
+        pages_crawled: 已爬取的頁數
+        current_url: 當前正在爬取的 URL
+    """
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            UPDATE seo_crawl_tasks
+            SET pages_crawled = %s, current_url = %s
+            WHERE keyword = %s
+        """, (pages_crawled, current_url, keyword))
+        conn.commit()
+        cur.close()
+        return_db_connection(conn)
+
+    except Exception as e:
+        logger.error(f"Error updating crawl task progress: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        if conn:
+            return_db_connection(conn)
+
+
+def complete_crawl_task(keyword: str, crawl_result: Dict, error_message: str = None):
+    """完成爬蟲任務（成功或失敗）
+
+    Args:
+        keyword: 關鍵字
+        crawl_result: 爬取結果（scraped_content 等）
+        error_message: 錯誤訊息（如果失敗）
+    """
+    conn = get_db_connection()
+    if not conn:
+        return
+
+    try:
+        cur = conn.cursor()
+
+        status = 'failed' if error_message else 'completed'
+
+        cur.execute("""
+            UPDATE seo_crawl_tasks
+            SET status = %s,
+                crawl_result = %s,
+                error_message = %s,
+                completed_at = NOW()
+            WHERE keyword = %s
+        """, (
+            status,
+            json.dumps(crawl_result, ensure_ascii=False) if crawl_result else None,
+            error_message,
+            keyword
+        ))
+        conn.commit()
+        cur.close()
+        return_db_connection(conn)
+
+        logger.info(f"Crawl task completed for '{keyword}': status={status}")
+
+    except Exception as e:
+        logger.error(f"Error completing crawl task: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        if conn:
+            return_db_connection(conn)
+
+
+def get_completed_crawl_result(keyword: str, max_age_seconds: int = 3600) -> Optional[Dict]:
+    """取得已完成的爬蟲結果（快取）
+
+    Args:
+        keyword: 關鍵字
+        max_age_seconds: 最大快取時間（秒），預設 1 小時
+
+    Returns:
+        爬取結果字典，或 None（不存在/過期/未完成）
+    """
+    conn = get_db_connection()
+    if not conn:
+        return None
+
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT crawl_result, completed_at
+            FROM seo_crawl_tasks
+            WHERE keyword = %s
+              AND status = 'completed'
+              AND completed_at > NOW() - INTERVAL '1 second' * %s
+        """, (keyword, max_age_seconds))
+
+        row = cur.fetchone()
+        cur.close()
+        return_db_connection(conn)
+
+        if row and row[0]:
+            logger.info(f"Using cached crawl result for '{keyword}'")
+            return row[0]  # JSONB 會自動轉為 dict
+        return None
+
+    except Exception as e:
+        logger.error(f"Error getting completed crawl result: {e}")
+        if conn:
+            return_db_connection(conn)
+        return None
+
+
+def start_keyword_crawl_task(keyword: str) -> Dict:
+    """啟動關鍵字爬蟲任務（背景執行）
+
+    Args:
+        keyword: 要爬取的關鍵字
+
+    Returns:
+        {
+            "success": bool,
+            "message": str,
+            "status": str,  # pending/running/completed/failed
+            "already_running": bool
+        }
+    """
+    global _running_crawl_tasks
+
+    # 檢查是否有已完成的快取結果
+    cached = get_completed_crawl_result(keyword)
+    if cached:
+        return {
+            "success": True,
+            "message": "已有快取結果",
+            "status": "completed",
+            "already_running": False,
+            "cached": True
+        }
+
+    # 檢查是否已在執行中（記憶體鎖 + 資料庫狀態）
+    with _crawl_tasks_lock:
+        if _running_crawl_tasks.get(keyword):
+            return {
+                "success": True,
+                "message": "爬蟲任務正在執行中",
+                "status": "running",
+                "already_running": True
+            }
+
+        # 檢查資料庫中的狀態
+        existing = get_crawl_task_status(keyword)
+        if existing and existing["status"] == "running":
+            # 可能是之前的進程留下的，檢查是否超時（超過 10 分鐘視為卡住）
+            if existing["started_at"]:
+                started = datetime.fromisoformat(existing["started_at"])
+                elapsed = (datetime.now() - started).total_seconds()
+                if elapsed < 600:  # 10 分鐘內
+                    return {
+                        "success": True,
+                        "message": "爬蟲任務正在執行中",
+                        "status": "running",
+                        "already_running": True
+                    }
+
+        # 標記為執行中
+        _running_crawl_tasks[keyword] = True
+
+    # 創建/重置任務記錄
+    if not create_or_reset_crawl_task(keyword):
+        with _crawl_tasks_lock:
+            _running_crawl_tasks.pop(keyword, None)
+        return {
+            "success": False,
+            "message": "無法創建爬蟲任務",
+            "status": "failed",
+            "already_running": False
+        }
+
+    # 啟動背景執行緒
+    def run_crawl():
+        try:
+            _execute_crawl_task(keyword)
+        finally:
+            with _crawl_tasks_lock:
+                _running_crawl_tasks.pop(keyword, None)
+
+    thread = threading.Thread(target=run_crawl, daemon=True)
+    thread.start()
+
+    return {
+        "success": True,
+        "message": "爬蟲任務已啟動",
+        "status": "running",
+        "already_running": False
+    }
+
+
+def _execute_crawl_task(keyword: str):
+    """實際執行爬蟲任務（內部函數）
+
+    Args:
+        keyword: 關鍵字
+    """
+    logger.info(f"Starting crawl task for keyword: {keyword}")
+
+    try:
+        # 進度回調函數
+        def progress_callback(pages_crawled: int, total_pages: int, current_url: str):
+            update_crawl_task_progress(keyword, pages_crawled, current_url)
+
+        # 執行深度爬取分析
+        deep_crawl_enabled = getattr(Config, 'DEEP_CRAWL_ENABLED', True)
+
+        # 先取得 SERP 結果
+        serp = get_cached_serp(keyword)
+        if not serp:
+            logger.info(f"Fetching SERP for crawl task: {keyword}")
+            serp_result = dataforseo_client.get_serp_results(keyword, num=10)
+            if not serp_result.get("error"):
+                serp = {
+                    "organic_results": serp_result.get("organic_results", []),
+                    "people_also_ask": serp_result.get("people_also_ask", []),
+                    "related_searches": serp_result.get("related_searches", [])
+                }
+                store_serp_cache(keyword, serp)
+            else:
+                serp = {"organic_results": [], "people_also_ask": [], "related_searches": []}
+
+        # 取得種子 URLs
+        seed_urls = [item.get("url", "") for item in serp.get("organic_results", [])[:10] if item.get("url")]
+
+        if not seed_urls:
+            complete_crawl_task(keyword, {"scraped_content": []}, "無法取得 SERP 結果")
+            return
+
+        # 構建關鍵字列表
+        keywords_for_relevance = [keyword]
+        if serp.get("related_searches"):
+            keywords_for_relevance.extend(serp["related_searches"][:5])
+
+        # 創建爬蟲並執行（帶進度回調）
+        crawler = create_deep_crawler_from_config()
+        crawled_pages = crawler.crawl_with_depth(
+            seed_urls=seed_urls,
+            keywords=keywords_for_relevance,
+            max_results=20,
+            progress_callback=progress_callback
+        )
+
+        # 轉換結果格式
+        scraped_content = []
+        for page in crawled_pages:
+            content_dict = {
+                "url": page.url,
+                "title": page.title,
+                "meta_description": page.meta_description,
+                "main_content": page.main_content,
+                "word_count": page.word_count,
+                "success": page.success,
+                "error": page.error,
+                "depth": page.depth,
+                "relevance_score": page.relevance_score,
+                "quality_score": page.quality_score,
+                "combined_score": page.combined_score,
+                "source_url": page.source_url
+            }
+            scraped_content.append(content_dict)
+
+            # 同時存入快取
+            if page.success:
+                store_scraped_content(content_dict)
+
+        # 儲存結果
+        result = {
+            "scraped_content": scraped_content,
+            "serp": serp,
+            "deep_crawl_stats": {
+                "total_pages_crawled": crawler.total_pages_crawled,
+                "unique_domains": len(crawler.domain_page_count),
+                "domain_breakdown": dict(crawler.domain_page_count),
+                "depth_0_count": sum(1 for p in crawled_pages if p.depth == 0),
+                "depth_1_count": sum(1 for p in crawled_pages if p.depth == 1),
+                "avg_relevance": sum(p.relevance_score for p in crawled_pages) / len(crawled_pages) if crawled_pages else 0,
+                "avg_quality": sum(p.quality_score for p in crawled_pages) / len(crawled_pages) if crawled_pages else 0
+            }
+        }
+
+        complete_crawl_task(keyword, result)
+        logger.info(f"Crawl task completed for '{keyword}': {len(scraped_content)} pages")
+
+    except Exception as e:
+        logger.error(f"Crawl task failed for '{keyword}': {e}")
+        complete_crawl_task(keyword, None, str(e))
+
+
+def get_crawl_task_progress(keyword: str) -> Dict:
+    """取得爬蟲任務進度（供 API 使用）
+
+    Args:
+        keyword: 關鍵字
+
+    Returns:
+        進度資訊字典
+    """
+    status = get_crawl_task_status(keyword)
+
+    if not status:
+        return {
+            "keyword": keyword,
+            "status": "not_found",
+            "pages_crawled": 0,
+            "total_pages": 30,
+            "current_url": "",
+            "error_message": ""
+        }
+
+    return status

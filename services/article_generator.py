@@ -23,7 +23,8 @@ from services.seo_orchestrator import (
     analyze_keyword_full_with_deep_crawl,
     prepare_seo_context_for_prompt,
     prepare_deep_crawl_context_for_prompt,
-    generate_hierarchical_summary
+    generate_hierarchical_summary,
+    get_completed_crawl_result
 )
 from services.dataforseo_client import dataforseo_client
 
@@ -563,9 +564,31 @@ def generate_single_article_by_source(
         reference_section_title = "📰 參考新聞資料（中英並列）"
     else:
         # 使用 SERP 爬蟲內容作為參考（SEO/Trends 關鍵字）
-        logger.info(f"🔍 正在取得「{main_keyword}」的 SERP 數據（啟用深度爬取）...")
+        logger.info(f"🔍 正在取得「{main_keyword}」的 SERP 數據...")
 
-        if dataforseo_client.is_configured():
+        # 優先檢查是否有預爬蟲結果
+        cached_crawl = get_completed_crawl_result(main_keyword, max_age_seconds=3600)
+
+        if cached_crawl:
+            # 使用預爬蟲的快取結果（秒級響應）
+            logger.info(f"✅ 使用「{main_keyword}」的預爬蟲快取結果")
+            scraped_content = cached_crawl.get("scraped_content", [])
+
+            if scraped_content:
+                # 使用智能參考資料構建
+                reference_content = build_serp_reference_with_hierarchical_summary(
+                    scraped_content,
+                    main_keyword,
+                    seo_analysis=cached_crawl
+                )
+                logger.info(f"✅ 從快取取得「{main_keyword}」的爬蟲內容（{len(scraped_content)} 個頁面）")
+            else:
+                reference_content = fallback_content
+                logger.warning(f"⚠️ 「{main_keyword}」快取爬蟲結果為空，使用備用內容")
+
+        elif dataforseo_client.is_configured():
+            # 回退到即時爬取
+            logger.info(f"🔄 無快取結果，執行即時深度爬取：{main_keyword}")
             try:
                 # 使用深度爬取獲取更多內容
                 deep_crawl_enabled = getattr(Config, 'DEEP_CRAWL_ENABLED', True)

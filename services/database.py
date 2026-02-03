@@ -104,7 +104,8 @@ def ensure_database_initialized():
             'seo_trends_data',
             'seo_serp_cache',
             'seo_scraped_content',
-            'seo_domain_summary'
+            'seo_domain_summary',
+            'seo_crawl_tasks'
         ]
 
         cur.execute("""
@@ -275,6 +276,31 @@ def init_database():
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_seo_domain_summary_keyword
             ON seo_domain_summary(keyword)
+        """)
+
+        # SEO 爬蟲任務追蹤（用於預爬蟲功能）
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS seo_crawl_tasks (
+                id SERIAL PRIMARY KEY,
+                keyword VARCHAR(500) NOT NULL UNIQUE,
+                status VARCHAR(20) DEFAULT 'pending',
+                pages_crawled INTEGER DEFAULT 0,
+                total_pages INTEGER DEFAULT 30,
+                current_url TEXT,
+                crawl_result JSONB,
+                error_message TEXT,
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_crawl_tasks_keyword
+            ON seo_crawl_tasks(keyword)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_seo_crawl_tasks_status
+            ON seo_crawl_tasks(status)
         """)
 
         conn.commit()

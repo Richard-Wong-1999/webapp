@@ -10,7 +10,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import List, Dict, Set, Optional, Any
+from typing import List, Dict, Set, Optional, Any, Callable
 from urllib.parse import urlparse, urljoin
 from collections import defaultdict
 
@@ -156,12 +156,14 @@ class DeepCrawler:
         self.total_pages_crawled: int = 0
         self.start_time: float = 0
         self.keywords: List[str] = []
+        self.progress_callback: Optional[Callable[[int, int, str], None]] = None
 
     def crawl_with_depth(
         self,
         seed_urls: List[str],
         keywords: List[str],
-        max_results: int = 20
+        max_results: int = 20,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None
     ) -> List[CrawledPage]:
         """
         從種子 URLs 開始深度爬取
@@ -170,6 +172,7 @@ class DeepCrawler:
             seed_urls: 種子 URL 列表（通常來自 SERP 結果）
             keywords: 關鍵字列表（用於計算相關性）
             max_results: 返回的最大結果數
+            progress_callback: 進度回調函數，接收 (pages_crawled, total_pages, current_url)
 
         Returns:
             按綜合分數排序的爬取頁面列表
@@ -179,6 +182,7 @@ class DeepCrawler:
         self.domain_page_count.clear()
         self.total_pages_crawled = 0
         self.keywords = [k.lower() for k in keywords]
+        self.progress_callback = progress_callback
 
         all_results: List[CrawledPage] = []
 
@@ -265,6 +269,17 @@ class DeepCrawler:
                         self.domain_page_count[domain] += 1
                         self.total_pages_crawled += 1
                         results.append(result)
+
+                        # 調用進度回調
+                        if self.progress_callback:
+                            try:
+                                self.progress_callback(
+                                    self.total_pages_crawled,
+                                    self.config.max_total_pages,
+                                    result.url
+                                )
+                            except Exception as cb_err:
+                                logger.warning(f"Progress callback error: {cb_err}")
                 except Exception as e:
                     url = future_to_url[future]
                     logger.error(f"Error crawling {url}: {e}")
