@@ -24,9 +24,11 @@ from services.seo_orchestrator import (
     prepare_seo_context_for_prompt,
     prepare_deep_crawl_context_for_prompt,
     generate_hierarchical_summary,
-    get_completed_crawl_result
+    get_completed_crawl_result,
+    start_keyword_crawl_task
 )
 from services.dataforseo_client import dataforseo_client
+import time as time_module
 
 # 全域進度追蹤器
 article_generation_progress = ProgressTracker("article_generation")
@@ -34,6 +36,62 @@ article_generation_progress = ProgressTracker("article_generation")
 # 全域變數儲存 Prompts（用於除錯）
 generated_prompts = {}
 generated_prompts_lock = threading.Lock()
+
+
+def prefetch_seo_data_for_batch(keywords: list, keyword_sources_map: dict):
+    """批次預取 SEO 數據
+
+    在文章生成開始前，先並行啟動所有 SEO/Trends 關鍵字的爬蟲任務，
+    等待完成後再開始生成，避免重複等待。
+
+    Args:
+        keywords: 關鍵字列表
+        keyword_sources_map: 關鍵字來源映射 {keyword: source}
+    """
+    # 篩選出需要 SEO 數據的關鍵字
+    seo_keywords = [
+        kw for kw in keywords
+        if keyword_sources_map.get(kw) in ('seo', 'trends')
+    ]
+
+    if not seo_keywords:
+        return
+
+    logger.info(f"預取 {len(seo_keywords)} 個 SEO 關鍵字的數據...")
+
+    # 檢查哪些需要爬取（沒有快取的）
+    uncached = []
+    for kw in seo_keywords:
+        if not get_completed_crawl_result(kw, max_age_seconds=3600):
+            uncached.append(kw)
+
+    if not uncached:
+        logger.info("所有 SEO 關鍵字都有快取")
+        return
+
+    # 並行啟動爬蟲（限制並發數）
+    logger.info(f"啟動 {len(uncached)} 個 SEO 爬蟲任務...")
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        for kw in uncached:
+            executor.submit(start_keyword_crawl_task, kw)
+
+    # 等待完成（最多 5 分鐘）
+    timeout = 300
+    start = time_module.time()
+    while time_module.time() - start < timeout:
+        all_done = all(
+            get_completed_crawl_result(kw, max_age_seconds=3600) is not None
+            for kw in uncached
+        )
+        if all_done:
+            break
+        time_module.sleep(5)
+
+    completed_count = sum(
+        1 for kw in uncached
+        if get_completed_crawl_result(kw, max_age_seconds=3600) is not None
+    )
+    logger.info(f"SEO 數據預取完成：{completed_count}/{len(uncached)} 個關鍵字")
 
 
 def build_article_prompt(
@@ -865,6 +923,10 @@ def background_generate_articles_by_source(
     logger.info(f"🚀 開始生成 {total_articles} 篇文章（keyword_source={keyword_source}）")
     logger.info(f"🤖 使用 LLM 模型: {llm_provider}/{llm_model}")
     logger.info(f"📋 關鍵字來源映射: {keyword_sources_map}")
+
+    # 預取 SEO 數據（如果有 SEO/Trends 來源的關鍵字）
+    if keyword_source in ('seo', 'trends', 'mixed') and keyword_sources_map:
+        prefetch_seo_data_for_batch(selected_keywords, keyword_sources_map)
 
     # 準備備用內容（使用 SWD 新聞稿）
     source_for_fallback = 'swd'

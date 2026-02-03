@@ -7,6 +7,7 @@ import os
 import json
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse, urlunparse
 from bs4 import BeautifulSoup
@@ -158,6 +159,119 @@ def fetch_swd_list(list_url: str, days: int = 30):
     return press_list
 
 
+def process_single_swd_item(item, visited_infogov, visited_lock):
+    """處理單條 SWD 新聞（可並行執行）
+
+    Args:
+        item: SWD 列表項目，包含 date, title, url
+        visited_infogov: 已訪問的 InfoGov URL 集合
+        visited_lock: 線程鎖，用於保護 visited_infogov
+
+    Returns:
+        (filepath, article_data) 如果成功，否則 None
+    """
+    swd_date = item["date"]
+    swd_title = item["title"]
+    swd_url = item["url"]
+
+    try:
+        infogov_url = find_infogov_link_in_swd_page(swd_url)
+        if not infogov_url:
+            return None
+
+        infogov_url = strip_query(infogov_url)
+
+        # 線程安全的去重檢查
+        with visited_lock:
+            if infogov_url in visited_infogov:
+                return None
+            visited_infogov.add(infogov_url)
+
+        other_url = find_other_language_infogov_url(infogov_url)
+        other_url = strip_query(other_url) if other_url else ""
+
+        text_a, meta_a = trafi_extract(infogov_url)
+        title_a = meta_a.get("title", "") if meta_a else ""
+
+        text_b, meta_b = ("", {})
+        title_b = ""
+        if other_url:
+            text_b, meta_b = trafi_extract(other_url)
+            title_b = meta_b.get("title", "") if meta_b else ""
+
+        lang_a = (meta_a.get("language") if meta_a else "") or detect_lang_from_url(infogov_url)
+        lang_b = (meta_b.get("language") if meta_b else "") or detect_lang_from_url(other_url)
+
+        zh_url = ""
+        en_url = ""
+        zh_title = ""
+        en_title = ""
+        zh_text = ""
+        en_text = ""
+        zh_meta = {}
+        en_meta = {}
+
+        def assign(lang, url, title, text, meta):
+            nonlocal zh_url, en_url, zh_title, en_title, zh_text, en_text, zh_meta, en_meta
+            if lang and str(lang).lower().startswith("zh"):
+                zh_url, zh_title, zh_text, zh_meta = url, title, text, meta
+                return True
+            if lang and str(lang).lower().startswith("en"):
+                en_url, en_title, en_text, en_meta = url, title, text, meta
+                return True
+            return False
+
+        ok_a = assign(lang_a, infogov_url, title_a, text_a, meta_a)
+        ok_b = assign(lang_b, other_url, title_b, text_b, meta_b)
+
+        if not ok_a:
+            zh_chars = len(re.findall(r"[\u4e00-\u9fff]", text_a))
+            if zh_chars > 30:
+                zh_url, zh_title, zh_text, zh_meta = infogov_url, title_a, text_a, meta_a
+            else:
+                en_url, en_title, en_text, en_meta = infogov_url, title_a, text_a, meta_a
+
+        if other_url and not ok_b:
+            zh_chars = len(re.findall(r"[\u4e00-\u9fff]", text_b))
+            if zh_chars > 30:
+                zh_url, zh_title, zh_text, zh_meta = other_url, title_b, text_b, meta_b
+            else:
+                en_url, en_title, en_text, en_meta = other_url, title_b, text_b, meta_b
+
+        derived_date = derive_date_from_text_zh(zh_text) or swd_date
+        pid_a = extract_infogov_id(infogov_url)
+        pid_b = extract_infogov_id(other_url) if other_url else ""
+        pairing_key = pid_a or pid_b or f"{swd_date}|{urlparse(infogov_url).path}"
+
+        safe_key = make_safe_filename(pairing_key.replace("/", "_"))
+        filename = f"{derived_date}_{safe_key}.json"
+        filepath = os.path.join(Config.SWD_DIR, filename)
+
+        article_data = {
+            "date": derived_date,
+            "pairing_key": pairing_key,
+            "source": "swd_press + infogov",
+            "url": {"zh": zh_url, "en": en_url},
+            "title": {
+                "zh": zh_title or (swd_title if zh_url else ""),
+                "en": en_title or (swd_title if en_url else "")
+            },
+            "text": {"zh": (zh_text or "").strip(), "en": (en_text or "").strip()},
+            "metadata": {"zh": zh_meta or {}, "en": en_meta or {}},
+            "swd": {
+                "list_date": swd_date,
+                "list_title": swd_title,
+                "list_url": swd_url
+            }
+        }
+
+        return (filepath, article_data)
+
+    except Exception as e:
+        logger.warning(f"⚠️ 處理 {swd_title} 時出錯：{e}")
+        return None
+
+
 def background_crawl_news():
     global crawl_progress
 
@@ -197,122 +311,45 @@ def background_crawl_news():
             compute_and_store_keywords("swd", days=30)
             return
 
+        # 線程安全的集合
         visited_infogov = set()
+        visited_lock = threading.Lock()
         merged_count = 0
 
-        for i, item in enumerate(all_items, start=1):
-            # 檢查是否被停止
-            if not crawl_progress.get("running", True):
-                logger.info("SWD 爬蟲已被用戶停止")
-                crawl_progress.update({
-                    "status": "stopped",
-                    "message": f"已停止。已處理 {i-1}/{total} 筆。"
-                })
-                return
+        # 使用 ThreadPoolExecutor 並行處理
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {
+                executor.submit(process_single_swd_item, item, visited_infogov, visited_lock): item
+                for item in all_items
+            }
 
-            swd_date = item["date"]
-            swd_title = item["title"]
-            swd_url = item["url"]
+            for i, future in enumerate(as_completed(futures), 1):
+                # 檢查是否被停止
+                if not crawl_progress.get("running", True):
+                    logger.info("SWD 爬蟲已被用戶停止")
+                    # 取消尚未開始的任務
+                    for f in futures:
+                        f.cancel()
+                    crawl_progress.update({
+                        "status": "stopped",
+                        "message": f"已停止。已處理 {i-1}/{total} 筆。"
+                    })
+                    return
 
-            crawl_progress["completed"] = i
-            crawl_progress["message"] = f"正在處理第 {i}/{total} 筆：{swd_title[:30]}..."
+                item = futures[future]
+                crawl_progress["completed"] = i
+                crawl_progress["message"] = f"正在處理第 {i}/{total} 筆：{item['title'][:30]}..."
 
-            try:
-                infogov_url = find_infogov_link_in_swd_page(swd_url)
-                if not infogov_url:
+                try:
+                    result = future.result()
+                    if result:
+                        filepath, article_data = result
+                        with open(filepath, "w", encoding="utf-8") as f:
+                            json.dump(article_data, f, ensure_ascii=False, indent=2)
+                        merged_count += 1
+                except Exception as e:
+                    logger.warning(f"⚠️ 處理 {item['title']} 時出錯：{e}")
                     continue
-
-                infogov_url = strip_query(infogov_url)
-                if infogov_url in visited_infogov:
-                    continue
-                visited_infogov.add(infogov_url)
-
-                other_url = find_other_language_infogov_url(infogov_url)
-                other_url = strip_query(other_url) if other_url else ""
-
-                text_a, meta_a = trafi_extract(infogov_url)
-                title_a = meta_a.get("title", "") if meta_a else ""
-
-                text_b, meta_b = ("", {})
-                title_b = ""
-                if other_url:
-                    text_b, meta_b = trafi_extract(other_url)
-                    title_b = meta_b.get("title", "") if meta_b else ""
-
-                lang_a = (meta_a.get("language") if meta_a else "") or detect_lang_from_url(infogov_url)
-                lang_b = (meta_b.get("language") if meta_b else "") or detect_lang_from_url(other_url)
-
-                zh_url = ""
-                en_url = ""
-                zh_title = ""
-                en_title = ""
-                zh_text = ""
-                en_text = ""
-                zh_meta = {}
-                en_meta = {}
-
-                def assign(lang, url, title, text, meta):
-                    nonlocal zh_url, en_url, zh_title, en_title, zh_text, en_text, zh_meta, en_meta
-                    if lang and str(lang).lower().startswith("zh"):
-                        zh_url, zh_title, zh_text, zh_meta = url, title, text, meta
-                        return True
-                    if lang and str(lang).lower().startswith("en"):
-                        en_url, en_title, en_text, en_meta = url, title, text, meta
-                        return True
-                    return False
-
-                ok_a = assign(lang_a, infogov_url, title_a, text_a, meta_a)
-                ok_b = assign(lang_b, other_url, title_b, text_b, meta_b)
-
-                if not ok_a:
-                    zh_chars = len(re.findall(r"[\u4e00-\u9fff]", text_a))
-                    if zh_chars > 30:
-                        zh_url, zh_title, zh_text, zh_meta = infogov_url, title_a, text_a, meta_a
-                    else:
-                        en_url, en_title, en_text, en_meta = infogov_url, title_a, text_a, meta_a
-
-                if other_url and not ok_b:
-                    zh_chars = len(re.findall(r"[\u4e00-\u9fff]", text_b))
-                    if zh_chars > 30:
-                        zh_url, zh_title, zh_text, zh_meta = other_url, title_b, text_b, meta_b
-                    else:
-                        en_url, en_title, en_text, en_meta = other_url, title_b, text_b, meta_b
-
-                derived_date = derive_date_from_text_zh(zh_text) or swd_date
-                pid_a = extract_infogov_id(infogov_url)
-                pid_b = extract_infogov_id(other_url) if other_url else ""
-                pairing_key = pid_a or pid_b or f"{swd_date}|{urlparse(infogov_url).path}"
-
-                safe_key = make_safe_filename(pairing_key.replace("/", "_"))
-                filename = f"{derived_date}_{safe_key}.json"
-                filepath = os.path.join(Config.SWD_DIR, filename)
-
-                article_data = {
-                    "date": derived_date,
-                    "pairing_key": pairing_key,
-                    "source": "swd_press + infogov",
-                    "url": {"zh": zh_url, "en": en_url},
-                    "title": {
-                        "zh": zh_title or (swd_title if zh_url else ""),
-                        "en": en_title or (swd_title if en_url else "")
-                    },
-                    "text": {"zh": (zh_text or "").strip(), "en": (en_text or "").strip()},
-                    "metadata": {"zh": zh_meta or {}, "en": en_meta or {}},
-                    "swd": {
-                        "list_date": swd_date,
-                        "list_title": swd_title,
-                        "list_url": swd_url
-                    }
-                }
-
-                with open(filepath, "w", encoding="utf-8") as f:
-                    json.dump(article_data, f, ensure_ascii=False, indent=2)
-
-                merged_count += 1
-
-            except Exception as e:
-                logger.warning(f"⚠️ 處理 {swd_title} 時出錯：{e}")
-                continue
 
         crawl_progress.update({
             "running": False,

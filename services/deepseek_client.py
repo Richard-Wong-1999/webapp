@@ -4,11 +4,13 @@ import requests
 from config import Config
 from utils.logger import logger
 from utils.rate_limiter import RateLimiter
+from utils.retry import retry_with_backoff
 
 # 全域速率限制器（每2秒1次請求）
 api_limiter = RateLimiter(calls_per_second=Config.API_RATE_LIMIT)
 
 
+@retry_with_backoff(max_retries=3, base_delay=2, max_delay=30)
 def call_deepseek(prompt_text: str, model: str = None, temperature: float = None, max_tokens: int = None) -> str:
     """呼叫 DeepSeek API
 

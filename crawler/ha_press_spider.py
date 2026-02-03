@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, asdict
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -21,7 +22,7 @@ BASE_URL = "https://www.ha.org.hk/"
 DEFAULT_DAYS = 30
 DEFAULT_MAX_PAGES = 200
 DEFAULT_MAX_ITEMS = 500
-DEFAULT_SLEEP = 0.8
+DEFAULT_SLEEP = 0.3
 
 # 中文列表/內頁用 CHIB5（繁體 Big5）；英文用 ENG
 LANG_ZH = "CHIB5"
@@ -223,6 +224,30 @@ def make_bilingual_json_obj(
         "paragraph_count": len(pairs),
         "paragraphs": pairs,
     }
+
+
+def download_single_pdf(session: requests.Session, url: str, path: Path, sleep_time: float) -> bool:
+    """下載單個 PDF（用於並行下載）
+
+    Args:
+        session: requests Session
+        url: PDF URL
+        path: 儲存路徑
+        sleep_time: 下載後的等待時間
+
+    Returns:
+        是否成功
+    """
+    if not url or not path:
+        return False
+    try:
+        r = session.get(url, headers=HEADERS, timeout=60)
+        r.raise_for_status()
+        path.write_bytes(r.content)
+        time.sleep(sleep_time)
+        return True
+    except Exception:
+        return False
 
 
 # -----------------------------
@@ -531,20 +556,20 @@ def run_ha_crawl(
         # ✅ 每篇 bilingual JSON 直接放在 out_dir（符合你想要：webapp/crawler/ha_press/*.json）
         json_path = out_dir / f"{prefix}_bilingual.json"
 
-        # 下載 PDFs
-        if pdf_zh_url and pdf_path_zh:
-            if overwrite or (not pdf_path_zh.exists()):
-                r = session.get(pdf_zh_url, headers=HEADERS, timeout=60)
-                r.raise_for_status()
-                pdf_path_zh.write_bytes(r.content)
-                time.sleep(sleep)
-
-        if pdf_en_url and pdf_path_en:
-            if overwrite or (not pdf_path_en.exists()):
-                r = session.get(pdf_en_url, headers=HEADERS, timeout=60)
-                r.raise_for_status()
-                pdf_path_en.write_bytes(r.content)
-                time.sleep(sleep)
+        # 下載 PDFs（並行下載中英文版本）
+        with ThreadPoolExecutor(max_workers=2) as pdf_executor:
+            futures = []
+            if pdf_zh_url and pdf_path_zh and (overwrite or not pdf_path_zh.exists()):
+                futures.append(pdf_executor.submit(
+                    download_single_pdf, session, pdf_zh_url, pdf_path_zh, sleep / 2
+                ))
+            if pdf_en_url and pdf_path_en and (overwrite or not pdf_path_en.exists()):
+                futures.append(pdf_executor.submit(
+                    download_single_pdf, session, pdf_en_url, pdf_path_en, sleep / 2
+                ))
+            # 等待所有下載完成
+            for f in futures:
+                f.result()
 
         # 抽字 + 產生 bilingual JSON
         if overwrite or (not json_path.exists()):

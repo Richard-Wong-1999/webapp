@@ -65,7 +65,7 @@ class Config:
     ARTICLE_CACHE_TTL = 3600  # 1 hour in seconds
 
     # Threading and rate limiting
-    ARTICLE_GENERATION_WORKERS = 3  # 並發數
+    ARTICLE_GENERATION_WORKERS = 5  # 並發數
     API_RATE_LIMIT = 0.5  # Calls per second (1 call every 2 seconds)
 
     # Content limits
@@ -95,7 +95,7 @@ class Config:
 
     # 爬蟲設定
     SCRAPE_TIMEOUT = 10
-    SCRAPE_MAX_CONCURRENT = 3
+    SCRAPE_MAX_CONCURRENT = 5
 
     # 深度爬取設定
     DEEP_CRAWL_ENABLED = True              # 是否啟用深度爬取

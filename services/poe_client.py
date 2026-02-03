@@ -5,11 +5,13 @@ import requests
 from config import Config
 from utils.logger import logger
 from utils.rate_limiter import RateLimiter
+from utils.retry import retry_with_backoff
 
 # Poe API 速率限制器
 poe_limiter = RateLimiter(calls_per_second=Config.API_RATE_LIMIT)
 
 
+@retry_with_backoff(max_retries=3, base_delay=2, max_delay=30)
 def call_poe(prompt_text: str, model: str = "GPT-4o") -> tuple:
     """
     呼叫 Poe API
