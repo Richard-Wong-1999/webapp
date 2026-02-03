@@ -97,6 +97,14 @@ class Config:
     SCRAPE_TIMEOUT = 10
     SCRAPE_MAX_CONCURRENT = 3
 
+    # 深度爬取設定
+    DEEP_CRAWL_ENABLED = True              # 是否啟用深度爬取
+    DEEP_CRAWL_MAX_DEPTH = 2               # 最大深度（SERP 頁面 + 內部連結）
+    DEEP_CRAWL_MAX_PAGES_PER_DOMAIN = 5    # 每個域名最多頁數
+    DEEP_CRAWL_MAX_TOTAL_PAGES = 30        # 總頁面上限
+    DEEP_CRAWL_MIN_RELEVANCE = 0.3         # 最低相關性分數
+    DEEP_CRAWL_TIMEOUT = 300               # 深度爬取總超時（秒）
+
     # 香港位置代碼（DataForSEO）
     HK_LOCATION_CODE = 2344
 

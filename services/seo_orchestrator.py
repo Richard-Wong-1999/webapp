@@ -12,6 +12,7 @@ from config import Config
 from utils.logger import logger
 from services.dataforseo_client import dataforseo_client
 from services.serp_scraper import scrape_serp_urls, summarize_content
+from services.deep_crawler import DeepCrawler, DeepCrawlConfig, CrawledPage, create_deep_crawler_from_config
 from services.database import (
     get_db_connection,
     return_db_connection
@@ -593,3 +594,338 @@ def prepare_seo_context_for_prompt(
 def get_seo_analysis_progress() -> Dict[str, Any]:
     """取得當前 SEO 分析進度"""
     return dict(seo_analysis_progress)
+
+
+def analyze_keyword_full_with_deep_crawl(
+    keyword: str,
+    deep_crawl_enabled: bool = None,
+    skip_api_calls: bool = False
+) -> Dict[str, Any]:
+    """執行帶深度爬取的完整分析
+
+    與 analyze_keyword_full 類似，但使用智能深度爬取來獲取更多相關內容。
+
+    Args:
+        keyword: 要分析的關鍵字
+        deep_crawl_enabled: 是否啟用深度爬取，None 則使用全局配置
+        skip_api_calls: 是否跳過 API 調用（僅做爬取）
+
+    Returns:
+        {
+            "keyword": str,
+            "trends": {...},
+            "keyword_data": {...},
+            "serp": {...},
+            "scraped_content": [...],  # 深度爬取的結果
+            "deep_crawl_stats": {...},  # 深度爬取統計
+            "error": str (if failed)
+        }
+    """
+    global seo_analysis_progress
+
+    # 確定是否啟用深度爬取
+    if deep_crawl_enabled is None:
+        deep_crawl_enabled = getattr(Config, 'DEEP_CRAWL_ENABLED', True)
+
+    seo_analysis_progress = {
+        "running": True,
+        "keyword": keyword,
+        "step": "初始化",
+        "completed_steps": 0,
+        "total_steps": 4 if deep_crawl_enabled else 3,
+        "message": "開始分析（深度爬取模式）..." if deep_crawl_enabled else "開始分析...",
+        "error": None
+    }
+
+    result = {
+        "keyword": keyword,
+        "trends": None,
+        "keyword_data": None,
+        "serp": None,
+        "scraped_content": [],
+        "deep_crawl_stats": None,
+        "error": None
+    }
+
+    try:
+        # Step 1: 取得關鍵字數據（與原始函數相同）
+        if not skip_api_calls:
+            update_progress("keyword_data", "正在取得關鍵字完整數據...", 0)
+
+            keyword_data = get_cached_keyword_data(keyword)
+            trends = get_cached_trends(keyword)
+
+            if not keyword_data or not trends:
+                logger.info(f"Fetching complete keyword data for: {keyword}")
+                labs_data = dataforseo_client.get_related_keywords_labs(keyword, limit=20)
+
+                seed_metrics = labs_data.get("seed_keyword_metrics", {})
+                related = labs_data.get("related_keywords", [])
+
+                keyword_data = {
+                    "search_volume": seed_metrics.get("search_volume", 0),
+                    "cpc": seed_metrics.get("cpc", 0),
+                    "competition": seed_metrics.get("competition", 0),
+                    "competition_level": seed_metrics.get("competition_level", ""),
+                    "related_keywords": [
+                        {
+                            "keyword": r.get("keyword", ""),
+                            "search_volume": r.get("search_volume", 0),
+                            "cpc": r.get("cpc", 0),
+                            "competition": r.get("competition", 0)
+                        }
+                        for r in related[:20]
+                    ]
+                }
+
+                queries = [
+                    {
+                        "query": r.get("keyword", ""),
+                        "type": "related",
+                        "value": r.get("search_volume", 0)
+                    }
+                    for r in related[:20]
+                ]
+
+                trends = {
+                    "topics": [],
+                    "queries": queries
+                }
+
+                store_keyword_cache(keyword, keyword_data)
+                store_trends_cache(keyword, trends)
+
+            result["keyword_data"] = keyword_data
+            result["trends"] = trends
+            update_progress("keyword_data", "關鍵字數據完成", 1)
+
+        # Step 2: SERP Results
+        update_progress("serp", "正在取得搜尋結果...", 1)
+
+        serp = get_cached_serp(keyword)
+        if not serp and not skip_api_calls:
+            logger.info(f"Fetching SERP for: {keyword}")
+            serp_result = dataforseo_client.get_serp_results(keyword, num=10)
+            if not serp_result.get("error"):
+                serp = {
+                    "organic_results": serp_result.get("organic_results", []),
+                    "people_also_ask": serp_result.get("people_also_ask", []),
+                    "related_searches": serp_result.get("related_searches", [])
+                }
+                store_serp_cache(keyword, serp)
+            else:
+                serp = {
+                    "organic_results": [],
+                    "people_also_ask": [],
+                    "related_searches": [],
+                    "error": serp_result.get("error")
+                }
+
+        result["serp"] = serp
+        update_progress("serp", "搜尋結果完成", 2)
+
+        # Step 3: 深度爬取或普通爬取
+        if serp and serp.get("organic_results"):
+            seed_urls = [item.get("url", "") for item in serp["organic_results"][:10] if item.get("url")]
+
+            if deep_crawl_enabled and seed_urls:
+                update_progress("deep_crawling", "正在執行智能深度爬取...", 2)
+
+                # 構建關鍵字列表（包含主關鍵字和相關關鍵字）
+                keywords_for_relevance = [keyword]
+
+                # 添加相關搜尋詞
+                if serp.get("related_searches"):
+                    keywords_for_relevance.extend(serp["related_searches"][:5])
+
+                # 創建深度爬蟲並執行
+                crawler = create_deep_crawler_from_config()
+                crawled_pages = crawler.crawl_with_depth(
+                    seed_urls=seed_urls,
+                    keywords=keywords_for_relevance,
+                    max_results=20
+                )
+
+                # 轉換結果格式以匹配原有格式
+                for page in crawled_pages:
+                    content_dict = {
+                        "url": page.url,
+                        "title": page.title,
+                        "meta_description": page.meta_description,
+                        "main_content": page.main_content,
+                        "word_count": page.word_count,
+                        "success": page.success,
+                        "error": page.error,
+                        # 新增深度爬取特有欄位
+                        "depth": page.depth,
+                        "relevance_score": page.relevance_score,
+                        "quality_score": page.quality_score,
+                        "combined_score": page.combined_score,
+                        "source_url": page.source_url
+                    }
+                    result["scraped_content"].append(content_dict)
+
+                    # 同時存入快取
+                    if page.success:
+                        store_scraped_content(content_dict)
+
+                # 統計資訊
+                result["deep_crawl_stats"] = {
+                    "total_pages_crawled": crawler.total_pages_crawled,
+                    "unique_domains": len(crawler.domain_page_count),
+                    "domain_breakdown": dict(crawler.domain_page_count),
+                    "depth_0_count": sum(1 for p in crawled_pages if p.depth == 0),
+                    "depth_1_count": sum(1 for p in crawled_pages if p.depth == 1),
+                    "avg_relevance": sum(p.relevance_score for p in crawled_pages) / len(crawled_pages) if crawled_pages else 0,
+                    "avg_quality": sum(p.quality_score for p in crawled_pages) / len(crawled_pages) if crawled_pages else 0
+                }
+
+                update_progress("deep_crawling", f"深度爬取完成（{len(crawled_pages)} 頁）", 3)
+                logger.info(f"Deep crawl completed: {result['deep_crawl_stats']}")
+
+            else:
+                # 回退到普通爬取
+                update_progress("scraping", "正在爬取競爭對手網站...", 2)
+
+                urls_to_scrape = []
+                for item in serp["organic_results"][:10]:
+                    url = item.get("url", "")
+                    if url:
+                        cached = get_cached_scraped_content(url)
+                        if cached:
+                            result["scraped_content"].append(cached)
+                        else:
+                            urls_to_scrape.append(url)
+
+                if urls_to_scrape:
+                    scraped = scrape_serp_urls(urls_to_scrape)
+                    for item in scraped:
+                        if item.get("success"):
+                            store_scraped_content(item)
+                            result["scraped_content"].append(item)
+
+                update_progress("scraping", "網站爬取完成", 3)
+
+        seo_analysis_progress["running"] = False
+        seo_analysis_progress["message"] = "分析完成"
+
+    except Exception as e:
+        logger.error(f"Error in analyze_keyword_full_with_deep_crawl: {e}")
+        result["error"] = str(e)
+        seo_analysis_progress["running"] = False
+        seo_analysis_progress["error"] = str(e)
+        seo_analysis_progress["message"] = f"分析失敗: {e}"
+
+    return result
+
+
+def prepare_deep_crawl_context_for_prompt(
+    keyword: str,
+    analysis_result: Dict[str, Any],
+    max_content_length: int = 1500,
+    max_pages: int = 5
+) -> str:
+    """準備深度爬取結果的 SEO 上下文供 AI 生成使用
+
+    與 prepare_seo_context_for_prompt 類似，但針對深度爬取結果做優化，
+    優先展示高相關性和高質量的內容。
+
+    Args:
+        keyword: 關鍵字
+        analysis_result: analyze_keyword_full_with_deep_crawl 的結果
+        max_content_length: 每個競爭對手內容的最大長度
+        max_pages: 最多展示的頁面數
+
+    Returns:
+        格式化的 SEO 上下文字串
+    """
+    sections = []
+
+    # 關鍵字指標（與原函數相同）
+    keyword_data = analysis_result.get("keyword_data", {})
+    if keyword_data:
+        search_volume = keyword_data.get("search_volume", 0)
+        cpc = keyword_data.get("cpc", 0)
+        competition_level = keyword_data.get("competition_level", "N/A")
+
+        sections.append(f"""## SEO 關鍵字指標
+- 月搜尋量：{search_volume:,}
+- 平均 CPC：${cpc:.2f}
+- 競爭程度：{competition_level}""")
+
+    # 相關關鍵字
+    related_keywords = keyword_data.get("related_keywords", [])[:10]
+    if related_keywords:
+        related_list = ", ".join([k.get("keyword", "") for k in related_keywords if k.get("keyword")])
+        sections.append(f"""## 相關關鍵字（可作為長尾關鍵字）
+{related_list}""")
+
+    # 用戶常問問題
+    serp = analysis_result.get("serp", {})
+    people_also_ask = serp.get("people_also_ask", [])
+    if people_also_ask:
+        questions = []
+        for paa in people_also_ask[:5]:
+            q = paa.get("question", "")
+            if q:
+                questions.append(f"- {q}")
+        if questions:
+            sections.append(f"""## 用戶常問問題（建議在文章中回答）
+{chr(10).join(questions)}""")
+
+    # 相關搜尋
+    related_searches = serp.get("related_searches", [])
+    if related_searches:
+        searches = ", ".join(related_searches[:8])
+        sections.append(f"""## 相關搜尋詞
+{searches}""")
+
+    # 深度爬取統計（如果有）
+    deep_stats = analysis_result.get("deep_crawl_stats")
+    if deep_stats:
+        sections.append(f"""## 深度爬取統計
+- 總爬取頁面：{deep_stats.get('total_pages_crawled', 0)}
+- 涵蓋域名數：{deep_stats.get('unique_domains', 0)}
+- SERP 頁面：{deep_stats.get('depth_0_count', 0)}
+- 內部連結頁面：{deep_stats.get('depth_1_count', 0)}
+- 平均相關性：{deep_stats.get('avg_relevance', 0):.2f}
+- 平均質量：{deep_stats.get('avg_quality', 0):.2f}""")
+
+    # 競爭對手內容摘要（按綜合分數排序）
+    scraped_content = analysis_result.get("scraped_content", [])
+    if scraped_content:
+        # 按綜合分數排序（如果有），否則按原順序
+        sorted_content = sorted(
+            scraped_content,
+            key=lambda x: x.get("combined_score", 0),
+            reverse=True
+        )
+
+        competitor_sections = []
+        for i, content in enumerate(sorted_content[:max_pages], 1):
+            title = content.get("title", "")
+            main_content = content.get("main_content", "")
+            url = content.get("url", "")
+            relevance = content.get("relevance_score", 0)
+            quality = content.get("quality_score", 0)
+            depth = content.get("depth", 0)
+
+            if main_content:
+                summary = summarize_content(main_content, max_content_length)
+
+                # 添加深度和分數資訊
+                depth_info = "（SERP 頁面）" if depth == 0 else "（深度連結）"
+                score_info = f"相關性: {relevance:.2f}, 質量: {quality:.2f}" if relevance or quality else ""
+
+                competitor_sections.append(f"""### 參考 {i}: {title} {depth_info}
+來源：{url}
+{score_info}
+內容摘要：
+{summary}
+""")
+
+        if competitor_sections:
+            sections.append(f"""## 競爭對手內容參考（按相關性排序）
+{chr(10).join(competitor_sections)}""")
+
+    return "\n\n".join(sections) if sections else ""

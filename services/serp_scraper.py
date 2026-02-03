@@ -7,7 +7,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Dict, Optional, Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -294,6 +294,198 @@ def scrape_serp_urls(
     logger.info(f"Scraping completed: {success_count}/{len(results)} successful")
 
     return results
+
+
+def extract_internal_links(
+    soup: BeautifulSoup,
+    base_url: str,
+    max_links: int = 20
+) -> List[Dict[str, str]]:
+    """提取頁面內的同域名連結
+
+    Args:
+        soup: BeautifulSoup 物件
+        base_url: 基礎 URL（用於解析相對連結）
+        max_links: 最大提取連結數
+
+    Returns:
+        內部連結列表 [{"url": str, "anchor_text": str, "context": str}]
+    """
+    links = []
+    seen_urls = set()
+
+    try:
+        base_domain = urlparse(base_url).netloc
+    except Exception:
+        return links
+
+    for a_tag in soup.find_all('a', href=True):
+        if len(links) >= max_links:
+            break
+
+        href = a_tag.get('href', '').strip()
+        if not href or href.startswith('#') or href.startswith('javascript:'):
+            continue
+
+        try:
+            # 解析並標準化 URL
+            full_url = urljoin(base_url, href)
+            parsed = urlparse(full_url)
+
+            # 只處理同域名的 HTTP(S) 連結
+            if parsed.scheme not in ('http', 'https'):
+                continue
+            if parsed.netloc != base_domain:
+                continue
+
+            # 標準化 URL（移除錨點）
+            normalized = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+            if normalized.endswith('/') and len(parsed.path) > 1:
+                normalized = normalized.rstrip('/')
+
+            if normalized in seen_urls or normalized == base_url:
+                continue
+
+            # 跳過不需要的連結
+            if should_skip_url(full_url):
+                continue
+
+            seen_urls.add(normalized)
+
+            # 提取錨點文字
+            anchor_text = a_tag.get_text(strip=True)
+
+            # 提取周圍上下文（父元素的文字，最多 200 字元）
+            context = ""
+            parent = a_tag.parent
+            if parent:
+                context = parent.get_text(strip=True)[:200]
+
+            links.append({
+                "url": full_url,
+                "anchor_text": anchor_text,
+                "context": context
+            })
+
+        except Exception:
+            continue
+
+    return links
+
+
+def scrape_url_with_links(
+    url: str,
+    timeout: int = None,
+    extract_links: bool = True,
+    max_links: int = 20
+) -> Dict[str, Any]:
+    """爬取頁面並同時提取內部連結
+
+    在移除導航元素之前先提取連結，以確保能抓到導航中的重要連結
+
+    Args:
+        url: 目標 URL
+        timeout: 請求超時秒數
+        extract_links: 是否提取內部連結
+        max_links: 最大提取連結數
+
+    Returns:
+        {
+            "url": str,
+            "title": str,
+            "meta_description": str,
+            "main_content": str,
+            "word_count": int,
+            "internal_links": List[Dict],  # 新增
+            "success": bool,
+            "error": str (if failed)
+        }
+    """
+    if timeout is None:
+        timeout = getattr(Config, 'SCRAPE_TIMEOUT', 10)
+
+    result = {
+        "url": url,
+        "title": "",
+        "meta_description": "",
+        "main_content": "",
+        "word_count": 0,
+        "internal_links": [],
+        "success": False,
+        "error": None
+    }
+
+    if should_skip_url(url):
+        result["error"] = "URL skipped (blocked domain or invalid)"
+        return result
+
+    try:
+        headers = {
+            "User-Agent": DEFAULT_USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive"
+        }
+
+        response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+        response.raise_for_status()
+
+        # 檢查內容類型
+        content_type = response.headers.get("Content-Type", "")
+        if "text/html" not in content_type.lower():
+            result["error"] = f"Invalid content type: {content_type}"
+            return result
+
+        # 嘗試正確解碼
+        response.encoding = response.apparent_encoding or "utf-8"
+        html_content = response.text
+
+        # 解析 HTML
+        soup = BeautifulSoup(html_content, "html.parser")
+
+        # 提取標題
+        title_tag = soup.find("title")
+        result["title"] = title_tag.get_text(strip=True) if title_tag else ""
+
+        # 提取 meta description
+        meta_desc = soup.find("meta", attrs={"name": "description"})
+        if meta_desc:
+            result["meta_description"] = meta_desc.get("content", "")
+
+        # 在移除導航元素之前提取內部連結
+        if extract_links:
+            result["internal_links"] = extract_internal_links(soup, url, max_links)
+
+        # 提取主要內容（這會移除導航元素）
+        main_content = extract_main_content(soup)
+        result["main_content"] = main_content
+
+        # 計算字數（中文+英文單詞）
+        chinese_chars = len(re.findall(r'[\u4e00-\u9fff]', main_content))
+        english_words = len(re.findall(r'\b[a-zA-Z]+\b', main_content))
+        result["word_count"] = chinese_chars + english_words
+
+        result["success"] = True
+        logger.info(f"Scraped with links: {url} ({result['word_count']} words, {len(result['internal_links'])} links)")
+
+    except requests.exceptions.Timeout:
+        result["error"] = "Request timeout"
+        logger.warning(f"Scrape timeout: {url}")
+
+    except requests.exceptions.HTTPError as e:
+        result["error"] = f"HTTP error: {e.response.status_code}"
+        logger.warning(f"Scrape HTTP error: {url} - {e}")
+
+    except requests.exceptions.RequestException as e:
+        result["error"] = f"Request error: {str(e)}"
+        logger.warning(f"Scrape request error: {url} - {e}")
+
+    except Exception as e:
+        result["error"] = f"Unexpected error: {str(e)}"
+        logger.error(f"Scrape unexpected error: {url} - {e}")
+
+    return result
 
 
 def summarize_content(content: str, max_length: int = 500) -> str:
