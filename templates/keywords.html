@@ -851,7 +851,8 @@
       const status = progress.status || 'pending';
       const pagesCrawled = progress.pages_crawled || 0;
       const totalPages = progress.total_pages || 30;
-      const percent = Math.round((pagesCrawled / totalPages) * 100);
+      // 防止進度超過 100%（深度爬蟲的並發執行可能導致實際頁數超過預估）
+      const percent = Math.min(100, Math.round((pagesCrawled / totalPages) * 100));
 
       if (status === 'completed') {
         progressContainer.innerHTML = `
