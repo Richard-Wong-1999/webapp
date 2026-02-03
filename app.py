@@ -41,7 +41,8 @@ from services.seo_orchestrator import (
     seo_analysis_progress,
     start_keyword_crawl_task,
     get_crawl_task_progress,
-    get_completed_crawl_result
+    get_completed_crawl_result,
+    stop_all_crawls
 )
 from services.dataforseo_client import dataforseo_client
 from services.article_generator import (
@@ -765,6 +766,21 @@ def get_seo_crawl_result(keyword):
 
     except Exception as e:
         logger.error(f"Get SEO crawl result error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route("/api/seo/stop_all_crawls", methods=["POST"])
+def api_stop_all_crawls():
+    """停止所有正在執行的 SEO 爬蟲任務
+
+    用於緊急停止所有爬蟲，例如重啟前或資源不足時。
+    """
+    try:
+        result = stop_all_crawls()
+        logger.info(f"Stop all crawls: {result}")
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Stop all crawls error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
 

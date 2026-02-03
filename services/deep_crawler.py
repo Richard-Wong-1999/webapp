@@ -143,12 +143,13 @@ def normalize_url(url: str) -> str:
 class DeepCrawler:
     """智能深度爬蟲"""
 
-    def __init__(self, config: DeepCrawlConfig = None):
+    def __init__(self, config: DeepCrawlConfig = None, stop_check: Optional[Callable[[], bool]] = None):
         """
         初始化深度爬蟲
 
         Args:
             config: 爬取配置，若為 None 則使用預設值
+            stop_check: 停止檢查回調，返回 True 時停止爬取
         """
         self.config = config or DeepCrawlConfig()
         self.visited_urls: Set[str] = set()
@@ -157,6 +158,7 @@ class DeepCrawler:
         self.start_time: float = 0
         self.keywords: List[str] = []
         self.progress_callback: Optional[Callable[[int, int, str], None]] = None
+        self.stop_check: Optional[Callable[[], bool]] = stop_check
 
     def crawl_with_depth(
         self,
@@ -696,6 +698,11 @@ class DeepCrawler:
 
     def _should_stop(self) -> bool:
         """檢查是否應停止爬取"""
+        # 檢查外部停止信號
+        if self.stop_check and self.stop_check():
+            logger.info("Deep crawl stopped by external signal")
+            return True
+
         # 檢查總頁面數限制
         if self.total_pages_crawled >= self.config.max_total_pages:
             return True
@@ -733,8 +740,12 @@ class DeepCrawler:
         return successful[:max_results]
 
 
-def create_deep_crawler_from_config() -> DeepCrawler:
-    """從全局配置創建深度爬蟲實例"""
+def create_deep_crawler_from_config(stop_check: Optional[Callable[[], bool]] = None) -> DeepCrawler:
+    """從全局配置創建深度爬蟲實例
+
+    Args:
+        stop_check: 停止檢查回調，返回 True 時停止爬取
+    """
     config = DeepCrawlConfig(
         max_depth=getattr(Config, 'DEEP_CRAWL_MAX_DEPTH', 2),
         max_pages_per_domain=getattr(Config, 'DEEP_CRAWL_MAX_PAGES_PER_DOMAIN', 5),
@@ -743,4 +754,4 @@ def create_deep_crawler_from_config() -> DeepCrawler:
         total_timeout=getattr(Config, 'DEEP_CRAWL_TIMEOUT', 300),
         timeout_per_page=getattr(Config, 'SCRAPE_TIMEOUT', 10),
     )
-    return DeepCrawler(config)
+    return DeepCrawler(config, stop_check=stop_check)

@@ -777,8 +777,8 @@ def analyze_keyword_full_with_deep_crawl(
                 if serp.get("related_searches"):
                     keywords_for_relevance.extend(serp["related_searches"][:5])
 
-                # 創建深度爬蟲並執行
-                crawler = create_deep_crawler_from_config()
+                # 創建深度爬蟲並執行（傳入停止檢查回調）
+                crawler = create_deep_crawler_from_config(stop_check=is_crawl_stopped)
                 crawled_pages = crawler.crawl_with_depth(
                     seed_urls=seed_urls,
                     keywords=keywords_for_relevance,
@@ -1242,6 +1242,79 @@ def generate_hierarchical_summary(
 _running_crawl_tasks: Dict[str, bool] = {}
 _crawl_tasks_lock = threading.Lock()
 
+# 全域停止旗標
+_global_crawl_stop_flag = False
+
+
+def stop_all_crawls() -> Dict:
+    """停止所有正在執行的爬蟲任務
+
+    Returns:
+        {
+            "success": bool,
+            "stopped_count": int,
+            "message": str
+        }
+    """
+    global _global_crawl_stop_flag, _running_crawl_tasks
+
+    _global_crawl_stop_flag = True
+
+    # 清除記憶體中的任務追蹤
+    with _crawl_tasks_lock:
+        stopped_keywords = list(_running_crawl_tasks.keys())
+        _running_crawl_tasks.clear()
+
+    # 更新資料庫中所有 running 狀態的任務為 stopped
+    conn = get_db_connection()
+    stopped_count = 0
+
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE seo_crawl_tasks
+                SET status = 'stopped',
+                    error_message = '手動停止',
+                    completed_at = NOW()
+                WHERE status = 'running'
+            """)
+            stopped_count = cur.rowcount
+            conn.commit()
+            cur.close()
+            return_db_connection(conn)
+            logger.info(f"Stopped {stopped_count} crawl tasks in database")
+        except Exception as e:
+            logger.error(f"Error stopping crawl tasks: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            if conn:
+                return_db_connection(conn)
+
+    logger.info(f"Global crawl stop: {len(stopped_keywords)} memory tasks, {stopped_count} db tasks")
+
+    # 5 秒後重置停止旗標，允許之後啟動新爬蟲
+    def reset_flag():
+        global _global_crawl_stop_flag
+        time.sleep(5)
+        _global_crawl_stop_flag = False
+        logger.info("Crawl stop flag reset")
+
+    threading.Thread(target=reset_flag, daemon=True).start()
+
+    return {
+        "success": True,
+        "stopped_count": stopped_count + len(stopped_keywords),
+        "message": f"已停止 {stopped_count} 個爬蟲任務"
+    }
+
+
+def is_crawl_stopped() -> bool:
+    """檢查是否全域停止爬蟲"""
+    return _global_crawl_stop_flag
+
 
 def get_crawl_task_status(keyword: str) -> Optional[Dict]:
     """從資料庫取得爬蟲任務狀態
@@ -1552,8 +1625,16 @@ def _execute_crawl_task(keyword: str):
     logger.info(f"Starting crawl task for keyword: {keyword}")
 
     try:
-        # 進度回調函數
+        # 檢查全域停止旗標
+        if is_crawl_stopped():
+            logger.info(f"Crawl task for '{keyword}' stopped by global flag")
+            complete_crawl_task(keyword, {"scraped_content": []}, "已被停止")
+            return
+
+        # 進度回調函數（同時檢查停止旗標）
         def progress_callback(pages_crawled: int, total_pages: int, current_url: str):
+            if is_crawl_stopped():
+                raise InterruptedError("Crawl stopped by user")
             update_crawl_task_progress(keyword, pages_crawled, current_url)
 
         # 執行深度爬取分析
@@ -1586,8 +1667,8 @@ def _execute_crawl_task(keyword: str):
         if serp.get("related_searches"):
             keywords_for_relevance.extend(serp["related_searches"][:5])
 
-        # 創建爬蟲並執行（帶進度回調）
-        crawler = create_deep_crawler_from_config()
+        # 創建爬蟲並執行（帶進度回調和停止檢查）
+        crawler = create_deep_crawler_from_config(stop_check=is_crawl_stopped)
         crawled_pages = crawler.crawl_with_depth(
             seed_urls=seed_urls,
             keywords=keywords_for_relevance,
@@ -1635,6 +1716,10 @@ def _execute_crawl_task(keyword: str):
 
         complete_crawl_task(keyword, result)
         logger.info(f"Crawl task completed for '{keyword}': {len(scraped_content)} pages")
+
+    except InterruptedError as e:
+        logger.info(f"Crawl task for '{keyword}' interrupted: {e}")
+        complete_crawl_task(keyword, {"scraped_content": scraped_content if 'scraped_content' in dir() else []}, "已被停止")
 
     except Exception as e:
         logger.error(f"Crawl task failed for '{keyword}': {e}")
