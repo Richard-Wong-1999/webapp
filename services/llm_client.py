@@ -150,14 +150,3 @@ def get_poe_points(session: dict) -> int:
         int: 累計的 Poe 點數
     """
     return session.get('poe_points_used', 0) if session else 0
-
-
-def reset_poe_points(session: dict) -> None:
-    """
-    重置 Poe 點數計數
-
-    Args:
-        session: Flask session 物件
-    """
-    if session:
-        session['poe_points_used'] = 0

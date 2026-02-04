@@ -30,7 +30,6 @@ from services import (
     clear_article_cache,
     keywords_cache,
     keywords_cache_lock,
-    background_generate_articles,
     article_generation_progress,
     generated_prompts
 )
@@ -45,10 +44,7 @@ from services.seo_orchestrator import (
     stop_all_crawls
 )
 from services.dataforseo_client import dataforseo_client
-from services.article_generator import (
-    generate_single_article_with_seo,
-    background_generate_articles_by_source
-)
+from services.article_generator import background_generate_articles_by_source
 from services.llm_client import (
     get_current_model,
     get_available_models,

@@ -75,8 +75,3 @@ def call_deepseek(prompt_text: str, model: str = None, temperature: float = None
     except Exception as e:
         logger.error(f"⚠️ [DeepSeek] API 呼叫失敗：model={use_model}，錯誤={e}")
         return ""
-
-
-def reset_rate_limiter():
-    """重置速率限制器（用於測試或重置）"""
-    api_limiter.reset()

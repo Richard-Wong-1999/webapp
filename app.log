@@ -1,0 +1,30 @@
+2026-02-05 00:35:32 - webapp - INFO - ✅ 資料庫連接池已初始化 (ThreadedConnectionPool, min=2, max=10)
+2026-02-05 00:35:32 - webapp - INFO - [WIX] wix_client 模組已載入
+2026-02-05 00:35:32 - webapp - INFO - 🔧 初始化資料庫連接池...
+2026-02-05 00:35:32 - webapp - INFO - 🗄️ 初始化資料庫...
+2026-02-05 00:35:33 - webapp - INFO - 🧹 啟動快取管理器...
+2026-02-05 00:35:33 - webapp - INFO - 📂 SWD 爬蟲資料夾: C:\Users\user\Desktop\webapp\crawler\swd_press
+2026-02-05 00:35:33 - webapp - INFO - 📂 HA 爬蟲資料夾: C:\Users\user\Desktop\webapp\crawler\ha_press
+2026-02-05 00:35:33 - webapp - INFO - 🚀 Flask 應用啟動中...
+2026-02-05 00:36:53 - webapp - INFO - 🔄 [KeywordExtractor] 開始計算關鍵字：swd，天數：30
+2026-02-05 00:36:53 - webapp - INFO - 📂 [KeywordExtractor] 開始讀取文章：swd，目錄：C:\Users\user\Desktop\webapp\crawler\swd_press，天數：30
+2026-02-05 00:36:53 - webapp - WARNING - ⚠️ [KeywordExtractor] 資料夾不存在：C:\Users\user\Desktop\webapp\crawler\swd_press
+2026-02-05 00:36:53 - webapp - WARNING - ⚠️ [swd] 沒有找到文章
+2026-02-05 00:36:53 - webapp - INFO - ✅ 已儲存 swd 關鍵字快取（0 個，TTL=3600秒）
+2026-02-05 00:36:53 - webapp - INFO - ✅ [KeywordExtractor] 關鍵字計算完成：swd
+2026-02-05 00:36:53 - webapp - INFO - 📊 [KeywordExtractor] 計算統計：0 個有效關鍵字，0 個映射，耗時 0.00 秒
+2026-02-05 00:36:53 - webapp - INFO - 🔄 [KeywordExtractor] 開始計算關鍵字：swd，天數：30
+2026-02-05 00:36:53 - webapp - INFO - 📂 [KeywordExtractor] 開始讀取文章：swd，目錄：C:\Users\user\Desktop\webapp\crawler\swd_press，天數：30
+2026-02-05 00:36:53 - webapp - INFO - 🔄 [KeywordExtractor] 開始計算關鍵字：ha，天數：30
+2026-02-05 00:36:53 - webapp - WARNING - ⚠️ [KeywordExtractor] 資料夾不存在：C:\Users\user\Desktop\webapp\crawler\swd_press
+2026-02-05 00:36:53 - webapp - INFO - 📂 [KeywordExtractor] 開始讀取文章：ha，目錄：C:\Users\user\Desktop\webapp\crawler\ha_press，天數：30
+2026-02-05 00:36:53 - webapp - WARNING - ⚠️ [swd] 沒有找到文章
+2026-02-05 00:36:53 - webapp - INFO - ✅ 已儲存 swd 關鍵字快取（0 個，TTL=3600秒）
+2026-02-05 00:36:53 - webapp - INFO - 📂 [KeywordExtractor] 找到 0 個 JSON 檔案
+2026-02-05 00:36:53 - webapp - INFO - ✅ [KeywordExtractor] 關鍵字計算完成：swd
+2026-02-05 00:36:53 - webapp - INFO - ✅ [KeywordExtractor] 文章讀取完成：0 篇符合條件
+2026-02-05 00:36:53 - webapp - INFO - 📊 [KeywordExtractor] 計算統計：0 個有效關鍵字，0 個映射，耗時 0.00 秒
+2026-02-05 00:36:53 - webapp - WARNING - ⚠️ [ha] 沒有找到文章
+2026-02-05 00:36:53 - webapp - INFO - ✅ 已儲存 ha 關鍵字快取（0 個，TTL=3600秒）
+2026-02-05 00:36:53 - webapp - INFO - ✅ [KeywordExtractor] 關鍵字計算完成：ha
+2026-02-05 00:36:53 - webapp - INFO - 📊 [KeywordExtractor] 計算統計：0 個有效關鍵字，0 個映射，耗時 0.00 秒

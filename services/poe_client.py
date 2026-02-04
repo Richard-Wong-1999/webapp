@@ -102,24 +102,3 @@ def filter_thinking_content(content: str) -> str:
     content = re.sub(r'\n{3,}', '\n\n', content)
 
     return content.strip()
-
-
-def get_poe_usage() -> dict:
-    """
-    獲取 Poe API 使用量統計
-
-    注意：目前 Poe API 不提供使用量查詢端點，
-    這裡返回從 session 累計的使用量。
-
-    Returns:
-        dict: 包含 points_used 和 points_remaining 的字典
-    """
-    return {
-        "points_used": 0,  # 累計使用點數（需從 session 傳入）
-        "points_remaining": None  # Poe API 目前不支援查詢餘額
-    }
-
-
-def reset_poe_limiter():
-    """重置 Poe API 速率限制器"""
-    poe_limiter.reset()

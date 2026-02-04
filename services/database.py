@@ -336,40 +336,6 @@ def get_all_articles(conn) -> List[Dict]:
 
 
 @with_db_connection
-def get_articles_paginated(conn, page: int = 1, per_page: int = 20) -> Dict:
-    """分頁獲取文章"""
-    offset = (page - 1) * per_page
-
-    cur = conn.cursor(cursor_factory=RealDictCursor)
-
-    # 總數查詢
-    cur.execute("SELECT COUNT(*) as total FROM articles")
-    total = cur.fetchone()["total"]
-
-    # 分頁查詢
-    cur.execute(
-        """
-        SELECT * FROM articles
-        ORDER BY created_at DESC
-        LIMIT %s OFFSET %s
-        """,
-        (per_page, offset)
-    )
-    articles = cur.fetchall()
-    cur.close()
-
-    logger.info(f"📖 [Database] 分頁查詢：第 {page} 頁，返回 {len(articles)}/{total} 筆")
-
-    return {
-        "articles": [dict(a) for a in articles],
-        "total": total,
-        "page": page,
-        "per_page": per_page,
-        "total_pages": (total + per_page - 1) // per_page
-    }
-
-
-@with_db_connection
 def get_article_by_id(conn, article_id: int) -> Optional[Dict]:
     """根據 ID 取得單篇文章"""
     cur = conn.cursor(cursor_factory=RealDictCursor)
