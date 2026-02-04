@@ -10,7 +10,8 @@
       "Bash(git push:*)",
       "WebFetch(domain:docs.dataforseo.com)",
       "WebSearch",
-      "Bash(py:*)"
+      "Bash(py:*)",
+      "Bash(git fetch:*)"
     ]
   }
 }
