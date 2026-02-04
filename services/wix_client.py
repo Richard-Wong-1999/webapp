@@ -215,14 +215,8 @@ class HTMLToRicosConverter(HTMLParser):
         if not self.nodes:
             self.nodes.append(self._create_paragraph_node({"textData": {"text": ""}}))
 
-        return {
-            "nodes": self.nodes,
-            "metadata": {
-                "version": 1,
-                "createdTimestamp": int(time.time() * 1000),
-                "updatedTimestamp": int(time.time() * 1000)
-            }
-        }
+        # 只返回 nodes，不包含 metadata（測試證實這樣可以正常工作）
+        return {"nodes": self.nodes}
 
 
 def html_to_ricos(html_content: str) -> Dict[str, Any]:
@@ -236,12 +230,7 @@ def html_to_ricos(html_content: str) -> Dict[str, Any]:
     """
     if not html_content:
         return {
-            "nodes": [{"type": "PARAGRAPH", "id": "empty_1", "nodes": []}],
-            "metadata": {
-                "version": 1,
-                "createdTimestamp": int(time.time() * 1000),
-                "updatedTimestamp": int(time.time() * 1000)
-            }
+            "nodes": [{"type": "PARAGRAPH", "id": "empty_1", "nodes": []}]
         }
 
     converter = HTMLToRicosConverter()
