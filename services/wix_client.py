@@ -211,12 +211,41 @@ class HTMLToRicosConverter(HTMLParser):
             else:
                 self.nodes.append(self._create_paragraph_node(text_data))
 
-        # 如果沒有任何節點，添加一個空段落
-        if not self.nodes:
-            self.nodes.append(self._create_paragraph_node({"textData": {"text": ""}}))
+        # 清理空節點（Wix 不接受空節點）
+        cleaned_nodes = []
+        for node in self.nodes:
+            # 檢查節點是否有實際內容
+            if node.get("nodes"):
+                # 過濾掉空的子節點
+                valid_children = []
+                for child in node["nodes"]:
+                    if child.get("type") == "TEXT":
+                        text_content = child.get("textData", {}).get("text", "")
+                        if text_content.strip():
+                            valid_children.append(child)
+                    else:
+                        valid_children.append(child)
 
-        # 只返回 nodes，不包含 metadata（測試證實這樣可以正常工作）
-        return {"nodes": self.nodes}
+                if valid_children:
+                    node["nodes"] = valid_children
+                    cleaned_nodes.append(node)
+            else:
+                # 沒有子節點的節點（如某些特殊類型）也保留
+                cleaned_nodes.append(node)
+
+        # 如果沒有任何節點，添加一個包含空格的段落（避免完全空）
+        if not cleaned_nodes:
+            cleaned_nodes.append({
+                "type": "PARAGRAPH",
+                "id": self._generate_node_id(),
+                "nodes": [{
+                    "type": "TEXT",
+                    "id": self._generate_node_id(),
+                    "textData": {"text": " "}
+                }]
+            })
+
+        return {"nodes": cleaned_nodes}
 
 
 def html_to_ricos(html_content: str) -> Dict[str, Any]:
