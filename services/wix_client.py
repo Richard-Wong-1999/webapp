@@ -213,7 +213,7 @@ class HTMLToRicosConverter(HTMLParser):
 
         # 如果沒有任何節點，添加一個空段落
         if not self.nodes:
-            self.nodes.append(self._create_paragraph_node({"text": ""}))
+            self.nodes.append(self._create_paragraph_node({"textData": {"text": ""}}))
 
         return {
             "nodes": self.nodes,
