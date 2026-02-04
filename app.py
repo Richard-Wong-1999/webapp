@@ -1395,6 +1395,30 @@ def send_to_wix(article_id):
         }), 500
 
 
+@app.route("/api/wix/test", methods=["POST"])
+def wix_api_test():
+    """測試 Wix API 連接（使用簡單內容）"""
+    if not wix_client.is_configured():
+        return jsonify({"success": False, "message": "Wix API 未配置"}), 400
+
+    try:
+        # 使用最簡單的內容測試
+        result = wix_client.create_draft_post(
+            title="[API Test] 測試文章 - 可刪除",
+            content_html="<p>這是一個測試。</p>",
+            excerpt="API 測試"
+        )
+        draft_id = result.get("draftPost", {}).get("id", "unknown")
+        return jsonify({
+            "success": True,
+            "message": "測試成功！",
+            "draft_id": draft_id
+        })
+    except Exception as e:
+        logger.error(f"Wix 測試失敗: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @app.route("/batch_send_to_wix", methods=["POST"])
 def batch_send_to_wix():
     """批量發送文章到 Wix Blog（草稿）

@@ -408,9 +408,12 @@ class WixClient:
         }
 
         logger.info(f"正在創建 Wix 草稿文章: {title}")
-        # 診斷日誌：輸出實際發送的 payload 結構
+        # 診斷日誌
         import json
-        logger.info(f"Wix Payload (前 500 字): {json.dumps(payload, ensure_ascii=False)[:500]}")
+        logger.info(f"Wix memberId: {self.member_id}")
+        logger.info(f"Wix instance_id: {self.instance_id}")
+        logger.info(f"Wix richContent nodes 數量: {len(ricos_content.get('nodes', []))}")
+        logger.info(f"Wix Payload 結構: title={bool(draft_post.get('title'))}, memberId={bool(draft_post.get('memberId'))}, richContent={bool(draft_post.get('richContent'))}")
 
         result = self._make_request(
             method="POST",
