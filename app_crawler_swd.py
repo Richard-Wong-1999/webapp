@@ -174,9 +174,12 @@ def process_single_swd_item(item, visited_infogov, visited_lock):
     swd_title = item["title"]
     swd_url = item["url"]
 
+    logger.debug(f"📝 [SWD爬蟲] 開始處理：{swd_title[:30]}...")
+
     try:
         infogov_url = find_infogov_link_in_swd_page(swd_url)
         if not infogov_url:
+            logger.debug(f"⏭️ [SWD爬蟲] 跳過（無 InfoGov 連結）：{swd_title[:30]}")
             return None
 
         infogov_url = strip_query(infogov_url)
@@ -184,6 +187,7 @@ def process_single_swd_item(item, visited_infogov, visited_lock):
         # 線程安全的去重檢查
         with visited_lock:
             if infogov_url in visited_infogov:
+                logger.debug(f"⏭️ [SWD爬蟲] 跳過（重複 InfoGov）：{swd_title[:30]}")
                 return None
             visited_infogov.add(infogov_url)
 
@@ -265,15 +269,20 @@ def process_single_swd_item(item, visited_infogov, visited_lock):
             }
         }
 
+        logger.debug(f"✅ [SWD爬蟲] 處理完成：{swd_title[:30]} -> {filename}")
         return (filepath, article_data)
 
     except Exception as e:
-        logger.warning(f"⚠️ 處理 {swd_title} 時出錯：{e}")
+        logger.warning(f"⚠️ [SWD爬蟲] 處理失敗：{swd_title[:30]} - {e}")
         return None
 
 
 def background_crawl_news():
     global crawl_progress
+    from datetime import datetime as dt
+    start_time = dt.now()
+
+    logger.info("🚀 [SWD爬蟲] 開始執行 SWD 新聞爬蟲任務")
 
     crawl_progress.update({
         "total": 0,
@@ -288,12 +297,16 @@ def background_crawl_news():
         base_url_en = "https://www.swd.gov.hk/en/whatsnew/press/"
 
         days = Config.SWD_CRAWL_DAYS
+        logger.info(f"📋 [SWD爬蟲] 爬取設定：天數={days}，輸出目錄={Config.SWD_DIR}")
 
         os.makedirs(Config.SWD_DIR, exist_ok=True)
 
         crawl_progress["message"] = f"正在抓取 SWD 中英文新聞列表（近 {days} 天）..."
+        logger.info(f"📡 [SWD爬蟲] 正在取得中文新聞列表：{base_url_zh}")
         zh_list = fetch_swd_list(base_url_zh, days=days)
+        logger.info(f"📡 [SWD爬蟲] 正在取得英文新聞列表：{base_url_en}")
         en_list = fetch_swd_list(base_url_en, days=days)
+        logger.info(f"✅ [SWD爬蟲] 新聞列表取得完成：中文 {len(zh_list)} 筆，英文 {len(en_list)} 筆")
 
         all_items = zh_list + en_list
         total = len(all_items)
@@ -302,6 +315,7 @@ def background_crawl_news():
         crawl_progress["message"] = f"發現 {total} 筆 SWD 列表項目（近 {days} 天），開始解析 InfoGov..."
 
         if total == 0:
+            logger.warning(f"⚠️ [SWD爬蟲] 沒有找到近 {days} 天的新聞資料")
             crawl_progress.update({
                 "running": False,
                 "status": "completed",
@@ -347,9 +361,23 @@ def background_crawl_news():
                         with open(filepath, "w", encoding="utf-8") as f:
                             json.dump(article_data, f, ensure_ascii=False, indent=2)
                         merged_count += 1
+                        logger.debug(f"💾 [SWD爬蟲] 已儲存：{os.path.basename(filepath)}")
                 except Exception as e:
-                    logger.warning(f"⚠️ 處理 {item['title']} 時出錯：{e}")
+                    logger.warning(f"⚠️ [SWD爬蟲] 處理失敗：{item['title'][:30]} - {e}")
                     continue
+
+            # 每處理 10 筆輸出一次進度
+            if i % 10 == 0:
+                logger.info(f"📝 [SWD爬蟲] 進度：{i}/{total}（已儲存 {merged_count} 筆）")
+
+        elapsed = (dt.now() - start_time).total_seconds()
+        logger.info("=" * 60)
+        logger.info("📊 [SWD爬蟲] 爬蟲任務完成摘要")
+        logger.info(f"   總列表項目: {total} 筆")
+        logger.info(f"   成功輸出: {merged_count} 份 JSON")
+        logger.info(f"   跳過/重複: {total - merged_count} 筆")
+        logger.info(f"   總耗時: {elapsed:.2f} 秒")
+        logger.info("=" * 60)
 
         crawl_progress.update({
             "running": False,
@@ -359,14 +387,17 @@ def background_crawl_news():
 
         # 清除舊的文章快取，確保讀取最新資料
         clear_article_cache("swd")
+        logger.info("🗑️ [SWD爬蟲] 已清除文章快取")
 
         # 爬完立刻更新 SWD keywords cache
+        logger.info("🔄 [SWD爬蟲] 開始更新關鍵字快取...")
         compute_and_store_keywords("swd", days=30)
 
     except Exception as e:
+        elapsed = (dt.now() - start_time).total_seconds()
         crawl_progress.update({
             "running": False,
             "status": "error",
             "message": f"爬蟲執行錯誤：{str(e)}"
         })
-        logger.error(f"❌ 爬蟲錯誤：{e}")
+        logger.error(f"❌ [SWD爬蟲] 爬蟲執行錯誤：{e}，耗時 {elapsed:.2f} 秒")

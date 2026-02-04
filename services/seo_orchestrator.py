@@ -492,7 +492,7 @@ def analyze_keyword_full(keyword: str, skip_scraping: bool = False) -> Dict[str,
 
         serp = get_cached_serp(keyword)
         if not serp:
-            logger.info(f"Fetching SERP for: {keyword}")
+            logger.info(f"🔍 [SEO] 正在取得 SERP 數據：{keyword}")
             serp_result = dataforseo_client.get_serp_results(keyword, num=10)
             if not serp_result.get("error"):
                 serp = {
@@ -501,6 +501,7 @@ def analyze_keyword_full(keyword: str, skip_scraping: bool = False) -> Dict[str,
                     "related_searches": serp_result.get("related_searches", [])
                 }
                 store_serp_cache(keyword, serp)
+                logger.info(f"✅ [SEO] SERP 數據取得成功：{len(serp['organic_results'])} 個搜尋結果")
             else:
                 serp = {
                     "organic_results": [],
@@ -508,6 +509,9 @@ def analyze_keyword_full(keyword: str, skip_scraping: bool = False) -> Dict[str,
                     "related_searches": [],
                     "error": serp_result.get("error")
                 }
+                logger.warning(f"⚠️ [DEGRADED] SERP 數據取得失敗（{keyword}）：{serp_result.get('error')}")
+        else:
+            logger.info(f"✅ [SEO] 使用快取的 SERP 數據：{keyword}")
 
         result["serp"] = serp
         update_progress("serp", "搜尋結果完成", 2)
@@ -1159,13 +1163,13 @@ def summarize_domain_content(
         if summary:
             # 儲存到快取
             store_domain_summary(keyword, domain, summary, urls)
-            logger.info(f"Generated summary for domain {domain} ({len(pages)} pages)")
+            logger.info(f"✅ [SEO] 域名摘要生成成功：{domain}（{len(pages)} 頁）")
             return summary
         else:
-            logger.warning(f"Empty summary returned for domain {domain}")
+            logger.warning(f"⚠️ [DEGRADED] 域名摘要為空：{domain}，該域名將被跳過")
             return ""
     except Exception as e:
-        logger.error(f"Failed to summarize domain {domain}: {e}")
+        logger.error(f"❌ [DEGRADED] 域名摘要生成失敗：{domain} - {e}，該域名將被跳過")
         return ""
 
 
@@ -1213,12 +1217,12 @@ def generate_hierarchical_summary(
                     summaries[domain] = result
                     logger.info(f"Completed summary for domain: {domain}")
             except Exception as e:
-                logger.warning(f"Failed to summarize {domain}: {e}")
+                logger.warning(f"⚠️ [DEGRADED] 域名 {domain} 摘要處理異常：{e}，跳過該域名")
                 # 跳過失敗的域名，繼續處理其他域名
                 continue
 
     if not summaries:
-        logger.warning("No summaries generated in hierarchical summary")
+        logger.warning("⚠️ [DEGRADED] 分層摘要生成失敗：所有域名摘要均為空")
         return ""
 
     # 3. 合併摘要 (Reduce 階段)

@@ -3,6 +3,7 @@
 import threading
 import time
 from typing import Dict, Any
+from utils.logger import logger
 
 
 class CacheManager:
@@ -45,12 +46,17 @@ class CacheManager:
 
     def cleanup_old_data(self):
         """清理過期資料"""
+        cleaned_count = 0
         with self.lock:
             # 清理過期的快取項目
             for cache_name, cache_data in list(self._caches.items()):
                 if 'expires_at' in cache_data:
                     if cache_data['expires_at'] < time.time():
                         del self._caches[cache_name]
+                        cleaned_count += 1
+
+        if cleaned_count > 0:
+            logger.info(f"🧹 [CacheManager] 清理過期快取：已移除 {cleaned_count} 項")
 
     def set(self, key: str, data: Any, ttl: int = None):
         """設定快取
@@ -66,6 +72,13 @@ class CacheManager:
                 cache_item['expires_at'] = time.time() + ttl
             self._caches[key] = cache_item
 
+            # 檢查快取大小警告
+            cache_count = len(self._caches)
+            if cache_count > 100:
+                logger.warning(f"⚠️ [CacheManager] 快取數量較多：{cache_count} 項，建議檢查清理策略")
+
+        logger.debug(f"✅ [CacheManager] 快取寫入：key={key}，TTL={ttl}s")
+
     def get(self, key: str) -> Any:
         """取得快取
 
@@ -78,14 +91,17 @@ class CacheManager:
         with self.lock:
             cache_item = self._caches.get(key)
             if not cache_item:
+                logger.debug(f"ℹ️ [CacheManager] 快取未命中：key={key}")
                 return None
 
             # 檢查是否過期
             if 'expires_at' in cache_item:
                 if cache_item['expires_at'] < time.time():
                     del self._caches[key]
+                    logger.debug(f"⏰ [CacheManager] 快取已過期：key={key}")
                     return None
 
+            logger.debug(f"✅ [CacheManager] 快取命中：key={key}")
             return cache_item.get('data')
 
     def clear(self, key: str = None):
@@ -96,9 +112,13 @@ class CacheManager:
         """
         with self.lock:
             if key:
-                self._caches.pop(key, None)
+                removed = self._caches.pop(key, None)
+                if removed:
+                    logger.debug(f"🗑️ [CacheManager] 清除快取：key={key}")
             else:
+                count = len(self._caches)
                 self._caches.clear()
+                logger.info(f"🗑️ [CacheManager] 清除所有快取：已移除 {count} 項")
 
     def exists(self, key: str) -> bool:
         """檢查快取是否存在且未過期"""

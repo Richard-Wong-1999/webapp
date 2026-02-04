@@ -19,7 +19,9 @@ def parse_ymd_date(s: str) -> date:
     """
     try:
         return datetime.strptime((s or "").strip(), "%Y-%m-%d").date()
-    except Exception:
+    except Exception as e:
+        if s and s.strip():  # 只有當有輸入值時才記錄警告
+            logger.warning(f"⚠️ [TextProcessing] 日期解析失敗：'{s}' - {e}")
         return None
 
 
@@ -33,10 +35,17 @@ def make_safe_filename(s: str, max_len=180) -> str:
     Returns:
         安全的檔案名稱
     """
+    original = s
     s = s or ""
     s = re.sub(r'[\\/*?:"<>|]', '', s)
     s = re.sub(r"\s+", " ", s).strip()
-    return s[:max_len] if len(s) > max_len else s
+    result = s[:max_len] if len(s) > max_len else s
+
+    # 只在有顯著修改時記錄
+    if original and original != result and len(original) - len(result) > 10:
+        logger.debug(f"ℹ️ [TextProcessing] 檔案名稱清理：'{original[:30]}...' -> '{result[:30]}...'")
+
+    return result
 
 
 def derive_date_from_text_zh(text: str) -> str:
@@ -52,8 +61,11 @@ def derive_date_from_text_zh(text: str) -> str:
         return ""
     m = re.search(r'(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日', text)
     if not m:
+        logger.debug(f"ℹ️ [TextProcessing] 無法從文本提取中文日期（長度={len(text)}）")
         return ""
-    return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    result = f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
+    logger.debug(f"✅ [TextProcessing] 從文本提取日期：{result}")
+    return result
 
 
 def split_bilingual_block(block: str) -> Dict[str, str]:
@@ -186,6 +198,7 @@ def read_json_files_by_date(
                 blocks.append(block)
 
         except Exception as e:
-            logger.warning(f"讀取檔案 {fn} 錯誤: {e}")
+            logger.warning(f"⚠️ [TextProcessing] 讀取檔案錯誤：{fn} - {e}")
 
+    logger.info(f"✅ [TextProcessing] 讀取完成：{len(blocks)} 篇文章符合日期條件")
     return blocks

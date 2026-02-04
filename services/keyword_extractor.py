@@ -74,7 +74,10 @@ def get_cached_keywords(source: str) -> List[str]:
     with keywords_cache_lock:
         cached = keywords_cache.get(source, {})
         if cached.get("expires_at", 0) > datetime.now().timestamp():
-            return cached.get("keywords", [])
+            keywords = cached.get("keywords", [])
+            logger.info(f"✅ [KeywordExtractor] 快取命中：{source}（{len(keywords)} 個關鍵字）")
+            return keywords
+        logger.info(f"ℹ️ [KeywordExtractor] 快取未命中或已過期：{source}")
         return None
 
 
@@ -164,17 +167,22 @@ def get_recent_articles_with_filenames(source: str = "swd", days: int = 30) -> L
         [(filename, block), ...] 列表，按日期降序排序
     """
     folder = get_source_dir(source)
+    logger.info(f"📂 [KeywordExtractor] 開始讀取文章：{source}，目錄：{folder}，天數：{days}")
 
     if not os.path.exists(folder):
-        logger.warning(f"⚠️ [{source}] 資料夾不存在：{folder}")
+        logger.warning(f"⚠️ [KeywordExtractor] 資料夾不存在：{folder}")
         return []
 
     all_files = os.listdir(folder)
     json_files = [f for f in all_files if f.endswith(".json") and f != "press_releases_recent.json"]
+    logger.info(f"📂 [KeywordExtractor] 找到 {len(json_files)} 個 JSON 檔案")
 
     articles_with_date = []
     today = datetime.now().date()
     cutoff = today - timedelta(days=days)
+    skipped_old = 0
+    skipped_error = 0
+    skipped_empty = 0
 
     for fn in json_files:
         try:
@@ -183,17 +191,26 @@ def get_recent_articles_with_filenames(source: str = "swd", days: int = 30) -> L
 
             d = parse_date_from_item(source, data)
             if d < cutoff:
+                skipped_old += 1
                 continue
 
             block = make_reference_block_from_json(source, data)
             if block:
                 articles_with_date.append((d, fn, block))
+            else:
+                skipped_empty += 1
 
         except Exception as e:
-            logger.warning(f"⚠️ [{source}] 讀取錯誤: {fn} - {e}")
+            skipped_error += 1
+            logger.warning(f"⚠️ [KeywordExtractor] 讀取錯誤: {fn} - {e}")
 
     # 按日期降序排序
     articles_with_date.sort(key=lambda x: x[0], reverse=True)
+
+    logger.info(f"✅ [KeywordExtractor] 文章讀取完成：{len(articles_with_date)} 篇符合條件")
+    if skipped_old > 0 or skipped_error > 0 or skipped_empty > 0:
+        logger.info(f"📊 [KeywordExtractor] 跳過統計：日期過舊={skipped_old}，讀取錯誤={skipped_error}，內容為空={skipped_empty}")
+
     return [(fn, block) for _, fn, block in articles_with_date]
 
 
@@ -295,7 +312,10 @@ def get_keyword_source_mapping(source: str) -> Dict[str, List[str]]:
     with keyword_source_mapping_lock:
         cached = keyword_source_mapping.get(source, {})
         if cached.get("expires_at", 0) > datetime.now().timestamp():
-            return cached.get("mapping", {})
+            mapping = cached.get("mapping", {})
+            logger.debug(f"✅ [KeywordExtractor] 映射快取命中：{source}（{len(mapping)} 個關鍵字）")
+            return mapping
+        logger.debug(f"ℹ️ [KeywordExtractor] 映射快取未命中或已過期：{source}")
         return {}
 
 
@@ -491,6 +511,8 @@ def compute_and_store_keywords(source: str, days: int = 30) -> List[str]:
         關鍵字列表（已驗證）
     """
     source = normalize_source(source)
+    logger.info(f"🔄 [KeywordExtractor] 開始計算關鍵字：{source}，天數：{days}")
+    start_time = datetime.now()
 
     try:
         # 使用新的驗證流程提取關鍵字
@@ -503,11 +525,14 @@ def compute_and_store_keywords(source: str, days: int = 30) -> List[str]:
         if keyword_mapping:
             store_keyword_source_mapping(source, keyword_mapping)
 
-        logger.info(f"✅ [{source}] 關鍵字計算完成: {len(valid_keywords)} 個有效關鍵字")
+        elapsed = (datetime.now() - start_time).total_seconds()
+        logger.info(f"✅ [KeywordExtractor] 關鍵字計算完成：{source}")
+        logger.info(f"📊 [KeywordExtractor] 計算統計：{len(valid_keywords)} 個有效關鍵字，{len(keyword_mapping)} 個映射，耗時 {elapsed:.2f} 秒")
         return valid_keywords
 
     except Exception as e:
-        logger.error(f"❌ 關鍵字計算失敗（{source}）：{e}")
+        elapsed = (datetime.now() - start_time).total_seconds()
+        logger.error(f"❌ [KeywordExtractor] 關鍵字計算失敗（{source}）：{e}，耗時 {elapsed:.2f} 秒")
         store_keywords(source, [], error=str(e))
         return []
 

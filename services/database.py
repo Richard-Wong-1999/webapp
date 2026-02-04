@@ -42,14 +42,15 @@ def get_db_connection():
         init_connection_pool()
 
     if db_pool is None:
-        logger.error("❌ 連接池未初始化")
+        logger.error("❌ [Database] 連接池未初始化")
         return None
 
     try:
         conn = db_pool.getconn()
+        logger.debug(f"✅ [Database] 從連接池取得連接")
         return conn
     except Exception as e:
-        logger.error(f"❌ 無法從連接池取得連接：{e}")
+        logger.error(f"❌ [Database] 無法從連接池取得連接：{e}")
         return None
 
 
@@ -60,8 +61,9 @@ def return_db_connection(conn):
     if db_pool and conn:
         try:
             db_pool.putconn(conn)
+            logger.debug(f"✅ [Database] 連接已歸還連接池")
         except Exception as e:
-            logger.error(f"⚠️ 歸還連接失敗：{e}")
+            logger.error(f"⚠️ [Database] 歸還連接失敗：{e}")
 
 
 def with_db_connection(func):
@@ -329,6 +331,7 @@ def get_all_articles(conn) -> List[Dict]:
     cur.execute("SELECT * FROM articles ORDER BY created_at DESC")
     articles = cur.fetchall()
     cur.close()
+    logger.info(f"📖 [Database] 查詢所有文章：返回 {len(articles)} 筆")
     return [dict(article) for article in articles]
 
 
@@ -355,6 +358,8 @@ def get_articles_paginated(conn, page: int = 1, per_page: int = 20) -> Dict:
     articles = cur.fetchall()
     cur.close()
 
+    logger.info(f"📖 [Database] 分頁查詢：第 {page} 頁，返回 {len(articles)}/{total} 筆")
+
     return {
         "articles": [dict(a) for a in articles],
         "total": total,
@@ -371,6 +376,10 @@ def get_article_by_id(conn, article_id: int) -> Optional[Dict]:
     cur.execute("SELECT * FROM articles WHERE id = %s", (article_id,))
     article = cur.fetchone()
     cur.close()
+    if article:
+        logger.debug(f"📖 [Database] 取得文章 ID={article_id}：成功")
+    else:
+        logger.warning(f"⚠️ [Database] 取得文章 ID={article_id}：找不到")
     return dict(article) if article else None
 
 
@@ -379,8 +388,10 @@ def delete_article(conn, article_id: int) -> Dict:
     """刪除單篇文章"""
     cur = conn.cursor()
     cur.execute("DELETE FROM articles WHERE id = %s", (article_id,))
+    deleted = cur.rowcount
     conn.commit()
     cur.close()
+    logger.info(f"🗑️ [Database] 刪除文章 ID={article_id}：影響 {deleted} 筆")
     return {"success": True, "message": "文章已刪除"}
 
 
@@ -388,6 +399,7 @@ def delete_article(conn, article_id: int) -> Dict:
 def batch_delete_articles(conn, article_ids: List[int]) -> Dict:
     """批量刪除文章"""
     if not article_ids:
+        logger.warning(f"⚠️ [Database] 批量刪除：未選擇任何文章")
         return {"success": False, "message": "未選擇任何文章"}
 
     cur = conn.cursor()
@@ -397,6 +409,8 @@ def batch_delete_articles(conn, article_ids: List[int]) -> Dict:
     deleted_count = cur.rowcount
     conn.commit()
     cur.close()
+
+    logger.info(f"🗑️ [Database] 批量刪除：請求 {len(article_ids)} 筆，實際刪除 {deleted_count} 筆")
 
     return {
         "success": True,
@@ -408,6 +422,9 @@ def batch_delete_articles(conn, article_ids: List[int]) -> Dict:
 def insert_article(conn, article_data: Dict) -> Dict:
     """插入新文章"""
     cur = conn.cursor()
+
+    title_preview = (article_data.get("title_zh") or article_data.get("title", ""))[:30]
+    logger.info(f"💾 [Database] 開始插入文章：{title_preview}...")
 
     cur.execute("""
         INSERT INTO articles (
@@ -443,5 +460,7 @@ def insert_article(conn, article_data: Dict) -> Dict:
     article_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
+
+    logger.info(f"✅ [Database] 文章插入成功：ID={article_id}，標題={title_preview}")
 
     return {"success": True, "id": article_id, "message": "文章已創建"}

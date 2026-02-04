@@ -508,8 +508,12 @@ def generate_single_article_with_seo(
             seo_context_str = prepare_seo_context_for_prompt(main_keyword, seo_result)
             if seo_context_str:
                 logger.info(f"✅ 成功取得「{main_keyword}」的 SEO 數據")
+            else:
+                logger.warning(f"⚠️ [DEGRADED] 「{main_keyword}」SEO 數據為空，將不含 SEO 上下文")
         except Exception as e:
-            logger.warning(f"⚠️ 取得 SEO 數據失敗：{e}")
+            logger.warning(f"⚠️ [DEGRADED] 取得 SEO 數據失敗（{main_keyword}）：{e}，將不含 SEO 上下文")
+    else:
+        logger.info(f"ℹ️ DataForSEO API 未配置，跳過 SEO 數據取得")
 
     # 取得相關參考資料
     reference_blocks = get_relevant_reference_blocks_by_mapping(
@@ -653,7 +657,7 @@ def generate_single_article_by_source(
                 logger.info(f"✅ 從快取取得「{main_keyword}」的爬蟲內容（{len(scraped_content)} 個頁面）")
             else:
                 reference_content = fallback_content
-                logger.warning(f"⚠️ 「{main_keyword}」快取爬蟲結果為空，使用備用內容")
+                logger.warning(f"⚠️ [DEGRADED] 「{main_keyword}」快取爬蟲結果為空，降級使用備用內容")
 
         elif dataforseo_client.is_configured():
             # 回退到即時爬取
@@ -677,12 +681,12 @@ def generate_single_article_by_source(
                     logger.info(f"✅ 成功取得「{main_keyword}」的深度爬蟲內容（{len(scraped_content)} 個頁面）")
                 else:
                     reference_content = fallback_content
-                    logger.warning(f"⚠️ 「{main_keyword}」SERP 爬蟲無內容，使用備用內容")
+                    logger.warning(f"⚠️ [DEGRADED] 「{main_keyword}」SERP 爬蟲無內容，降級使用備用內容")
             except Exception as e:
-                logger.warning(f"⚠️ 取得 SERP 數據失敗：{e}")
+                logger.warning(f"⚠️ [DEGRADED] 取得 SERP 數據失敗（{main_keyword}）：{e}，降級使用備用內容")
                 reference_content = fallback_content
         else:
-            logger.warning("⚠️ DataForSEO API 未配置，使用備用內容")
+            logger.warning(f"⚠️ [DEGRADED] DataForSEO API 未配置，「{main_keyword}」降級使用備用內容")
             reference_content = fallback_content
 
         reference_section_title = "🌐 競爭對手深度分析"

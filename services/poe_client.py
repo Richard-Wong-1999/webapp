@@ -24,8 +24,11 @@ def call_poe(prompt_text: str, model: str = "GPT-4o") -> tuple:
         tuple: (內容, 使用的 tokens)
     """
     if not Config.POE_API_KEY:
-        logger.error("❌ 未載入 POE_API_KEY，請檢查 .env 檔案")
+        logger.error("❌ [Poe] 未載入 POE_API_KEY，請檢查 .env 檔案")
         return "", 0
+
+    prompt_len = len(prompt_text)
+    logger.info(f"🔄 [Poe] 開始 API 呼叫：model={model}，prompt 長度={prompt_len} 字元")
 
     poe_limiter.wait()
 
@@ -53,21 +56,24 @@ def call_poe(prompt_text: str, model: str = "GPT-4o") -> tuple:
             res = response.json()
             content = res["choices"][0]["message"]["content"].strip()
             tokens_used = res.get("usage", {}).get("total_tokens", 0)
+            prompt_tokens = res.get("usage", {}).get("prompt_tokens", 0)
+            completion_tokens = res.get("usage", {}).get("completion_tokens", 0)
 
             # 過濾 thinking 內容
             content = filter_thinking_content(content)
 
-            logger.info(f"✅ Poe API ({model}) 呼叫成功（{len(content)} 字元，{tokens_used} tokens）")
+            logger.info(f"✅ [Poe] API 呼叫成功：model={model}")
+            logger.info(f"📊 [Poe] 響應統計：輸出={len(content)} 字元，tokens（prompt={prompt_tokens}, completion={completion_tokens}, total={tokens_used}）")
             return content, tokens_used
         else:
-            logger.error(f"❌ Poe API 錯誤：{response.status_code} - {response.text}")
+            logger.error(f"❌ [Poe] API 錯誤：HTTP {response.status_code} - {response.text[:200]}")
             return "", 0
 
     except requests.Timeout:
-        logger.error("⚠️ Poe API 呼叫逾時")
+        logger.error(f"⚠️ [Poe] API 呼叫逾時：model={model}，timeout={Config.DEEPSEEK_TIMEOUT}s")
         return "", 0
     except Exception as e:
-        logger.error(f"⚠️ Poe API 呼叫失敗：{e}")
+        logger.error(f"⚠️ [Poe] API 呼叫失敗：model={model}，錯誤={e}")
         return "", 0
 
 
