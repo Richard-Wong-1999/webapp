@@ -14,7 +14,8 @@
       "Bash(git fetch:*)",
       "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" add app.py)",
       "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" commit -m \"Add debug logging to trace Wix send request\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\")",
-      "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" push origin main)"
+      "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" push origin main)",
+      "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" commit -m \"Use logger.info for Wix debug messages\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\")"
     ]
   }
 }
