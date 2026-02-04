@@ -419,6 +419,9 @@ class WixClient:
         }
 
         logger.info(f"正在創建 Wix 草稿文章: {title}")
+        # 診斷日誌：輸出實際發送的 payload 結構
+        import json
+        logger.info(f"Wix Payload (前 500 字): {json.dumps(payload, ensure_ascii=False)[:500]}")
 
         result = self._make_request(
             method="POST",
