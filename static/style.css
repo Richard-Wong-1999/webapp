@@ -133,6 +133,19 @@ button:disabled,
   background: #162c49;
 }
 
+/* Wix - Wix Blog 傳送按鈕（Wix 品牌藍） */
+.btn-wix {
+  background: #0C6EFC;
+  color: #fff;
+}
+.btn-wix:hover:not(:disabled) {
+  background: #0958d9;
+}
+.btn-wix:disabled {
+  background: #7fb3fd;
+  cursor: not-allowed;
+}
+
 /* ==========================================================
    Checkbox（放大、好點）
    ========================================================== */
@@ -265,6 +278,22 @@ input[type="checkbox"] {
 .article-card.selected {
   border: 2px solid var(--gov-accent);
   background: #f0f6ff;
+}
+
+/* Wix 狀態指示器 */
+.wix-status {
+  margin-left: 15px;
+  font-size: 13px;
+}
+
+.wix-configured {
+  color: #28a745;
+  font-weight: 500;
+}
+
+.wix-not-configured {
+  color: #dc3545;
+  font-weight: 500;
 }
 
 /* ==========================================================

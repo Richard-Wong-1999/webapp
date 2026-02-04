@@ -116,6 +116,13 @@ class Config:
     DOMAIN_SUMMARY_MAX_WORKERS = 3            # 並行生成摘要的最大線程數
     DOMAIN_SUMMARY_CACHE_TTL = 21600          # 域名摘要快取 TTL（6小時，與 SERP 快取相同）
 
+    # Wix Blog API 配置
+    WIX_CLIENT_ID = os.getenv("WIX_CLIENT_ID")
+    WIX_CLIENT_SECRET = os.getenv("WIX_CLIENT_SECRET")
+    WIX_INSTANCE_ID = os.getenv("WIX_INSTANCE_ID")
+    WIX_REFRESH_TOKEN = os.getenv("WIX_REFRESH_TOKEN")
+    WIX_API_BASE_URL = "https://www.wixapis.com"
+
     @classmethod
     def validate(cls):
         """驗證必要的配置是否存在"""

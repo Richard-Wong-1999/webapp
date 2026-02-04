@@ -1315,6 +1315,185 @@ def api_test_progress():
 
 
 # ==========================================================
+# 路由：Wix Blog 整合
+# ==========================================================
+from services.wix_client import wix_client
+
+@app.route("/api/wix/status", methods=["GET"])
+def wix_api_status():
+    """檢查 Wix API 配置狀態"""
+    configured = wix_client.is_configured()
+    return jsonify({
+        "configured": configured,
+        "message": "Wix API 已配置" if configured else "Wix API 未配置，請設定環境變數"
+    })
+
+
+@app.route("/send_to_wix/<int:article_id>", methods=["POST"])
+def send_to_wix(article_id):
+    """將單篇文章發送到 Wix Blog（草稿）
+
+    只發送中文版本的文章
+    """
+    # 檢查 Wix API 配置
+    if not wix_client.is_configured():
+        return jsonify({
+            "success": False,
+            "message": "Wix API 未配置，請先設定環境變數"
+        }), 400
+
+    # 獲取文章
+    article = get_article_by_id(article_id)
+    if not article:
+        return jsonify({
+            "success": False,
+            "message": "文章不存在"
+        }), 404
+
+    # 檢查中文內容
+    title_zh = article.get("title_zh") or article.get("title") or ""
+    body_zh = article.get("body_zh") or article.get("body") or ""
+
+    if not title_zh or not body_zh:
+        return jsonify({
+            "success": False,
+            "message": "文章缺少中文標題或內容"
+        }), 400
+
+    # 準備摘要（使用 meta_description 或截取 body）
+    excerpt = article.get("meta_description_zh") or article.get("meta_description") or ""
+    if not excerpt and body_zh:
+        # 截取前 150 個字元作為摘要
+        import re
+        clean_text = re.sub(r'<[^>]+>', '', body_zh)  # 移除 HTML 標籤
+        excerpt = clean_text[:150] + "..." if len(clean_text) > 150 else clean_text
+
+    try:
+        result = wix_client.create_draft_post(
+            title=title_zh,
+            content_html=body_zh,
+            excerpt=excerpt
+        )
+
+        draft_id = result.get("draftPost", {}).get("id", "unknown")
+
+        return jsonify({
+            "success": True,
+            "message": f"文章已發送到 Wix Blog（草稿）",
+            "draft_id": draft_id,
+            "title": title_zh
+        })
+
+    except Exception as e:
+        logger.error(f"發送到 Wix 失敗: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"發送失敗：{str(e)}"
+        }), 500
+
+
+@app.route("/batch_send_to_wix", methods=["POST"])
+def batch_send_to_wix():
+    """批量發送文章到 Wix Blog（草稿）
+
+    只發送中文版本的文章
+    """
+    # 檢查 Wix API 配置
+    if not wix_client.is_configured():
+        return jsonify({
+            "success": False,
+            "message": "Wix API 未配置，請先設定環境變數"
+        }), 400
+
+    try:
+        data = request.get_json()
+        article_ids = data.get("article_ids", [])
+
+        if not article_ids:
+            return jsonify({
+                "success": False,
+                "message": "未選擇任何文章"
+            }), 400
+
+        results = {
+            "total": len(article_ids),
+            "success_count": 0,
+            "failed_count": 0,
+            "details": []
+        }
+
+        for article_id in article_ids:
+            article = get_article_by_id(article_id)
+            if not article:
+                results["failed_count"] += 1
+                results["details"].append({
+                    "id": article_id,
+                    "success": False,
+                    "message": "文章不存在"
+                })
+                continue
+
+            title_zh = article.get("title_zh") or article.get("title") or ""
+            body_zh = article.get("body_zh") or article.get("body") or ""
+
+            if not title_zh or not body_zh:
+                results["failed_count"] += 1
+                results["details"].append({
+                    "id": article_id,
+                    "success": False,
+                    "message": "缺少中文內容"
+                })
+                continue
+
+            # 準備摘要
+            excerpt = article.get("meta_description_zh") or article.get("meta_description") or ""
+            if not excerpt and body_zh:
+                import re
+                clean_text = re.sub(r'<[^>]+>', '', body_zh)
+                excerpt = clean_text[:150] + "..." if len(clean_text) > 150 else clean_text
+
+            try:
+                result = wix_client.create_draft_post(
+                    title=title_zh,
+                    content_html=body_zh,
+                    excerpt=excerpt
+                )
+
+                draft_id = result.get("draftPost", {}).get("id", "unknown")
+                results["success_count"] += 1
+                results["details"].append({
+                    "id": article_id,
+                    "success": True,
+                    "draft_id": draft_id,
+                    "title": title_zh
+                })
+
+            except Exception as e:
+                results["failed_count"] += 1
+                results["details"].append({
+                    "id": article_id,
+                    "success": False,
+                    "message": str(e)
+                })
+
+            # 避免 API 限流，每篇文章間隔 0.5 秒
+            time_module.sleep(0.5)
+
+        return jsonify({
+            "success": True,
+            "message": f"批量發送完成：成功 {results['success_count']} 篇，失敗 {results['failed_count']} 篇",
+            "results": results
+        })
+
+    except Exception as e:
+        logger.error(f"批量發送到 Wix 失敗: {e}")
+        return jsonify({
+            "success": False,
+            "message": f"批量發送失敗：{str(e)}"
+        }), 500
+
+
+# ==========================================================
 # 應用啟動
 # ==========================================================
 if __name__ == "__main__":

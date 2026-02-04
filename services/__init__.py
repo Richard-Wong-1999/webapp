@@ -66,6 +66,12 @@ from .seo_orchestrator import (
     seo_analysis_progress
 )
 
+from .wix_client import (
+    WixClient,
+    wix_client,
+    html_to_ricos
+)
+
 __all__ = [
     'init_connection_pool',
     'get_db_connection',
@@ -117,5 +123,9 @@ __all__ = [
     'analyze_keyword_full',
     'prepare_seo_context_for_prompt',
     'get_seo_analysis_progress',
-    'seo_analysis_progress'
+    'seo_analysis_progress',
+    # Wix Client
+    'WixClient',
+    'wix_client',
+    'html_to_ricos'
 ]

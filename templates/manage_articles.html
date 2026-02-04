@@ -30,12 +30,16 @@
         <button class="btn btn-danger" id="batchDeleteBtn" onclick="batchDelete()" disabled>
           🗑️ 批量刪除
         </button>
+        <button class="btn btn-wix" id="batchWixBtn" onclick="batchSendToWix()" disabled>
+          📤 批量傳送到 Wix
+        </button>
         {% endif %}
       </div>
       <div class="toolbar-right">
         <div class="selection-info" id="selectionInfo">
           資料來源：Render PostgreSQL
         </div>
+        <div class="wix-status" id="wixStatus"></div>
       </div>
     </div>
 
@@ -52,6 +56,7 @@
         </div>
         <div class="article-actions">
           <a href="/view_article/{{ article.id }}" class="btn btn-info">查看詳情</a>
+          <button class="btn btn-wix" onclick="sendToWix({{ article.id }}, '{{ article.title|e }}')">傳送到 Wix</button>
           <button class="btn btn-danger" onclick="deleteArticle({{ article.id }})">刪除</button>
         </div>
       </div>
@@ -72,13 +77,19 @@
       const checkboxes = document.querySelectorAll('.article-checkbox');
       const checked = Array.from(checkboxes).filter(cb => cb.checked);
       const count = checked.length;
-      
+
       // 更新計數
       document.getElementById('selectedCount').textContent = count;
-      
+
       // 更新批量刪除按鈕狀態
       const batchBtn = document.getElementById('batchDeleteBtn');
       batchBtn.disabled = count === 0;
+
+      // 更新批量發送到 Wix 按鈕狀態
+      const batchWixBtn = document.getElementById('batchWixBtn');
+      if (batchWixBtn) {
+        batchWixBtn.disabled = count === 0;
+      }
       
       // 更新選擇信息
       const selectionInfo = document.getElementById('selectionInfo');
@@ -156,13 +167,13 @@
     // 單篇刪除
     async function deleteArticle(id) {
       if (!confirm('確定要刪除這篇文章嗎？')) return;
-      
+
       try {
         const response = await fetch(`/delete_article/${id}`, {
           method: 'POST'
         });
         const result = await response.json();
-        
+
         if (result.success) {
           alert('✅ 文章已刪除');
           location.reload();
@@ -173,6 +184,136 @@
         alert('❌ 發生錯誤：' + error.message);
       }
     }
+
+    // 檢查 Wix API 狀態
+    async function checkWixStatus() {
+      try {
+        const response = await fetch('/api/wix/status');
+        const result = await response.json();
+
+        const statusEl = document.getElementById('wixStatus');
+        if (result.configured) {
+          statusEl.innerHTML = '<span class="wix-configured">✅ Wix 已連接</span>';
+        } else {
+          statusEl.innerHTML = '<span class="wix-not-configured">⚠️ Wix 未配置</span>';
+        }
+
+        return result.configured;
+      } catch (error) {
+        console.error('檢查 Wix 狀態失敗:', error);
+        return false;
+      }
+    }
+
+    // 單篇發送到 Wix
+    async function sendToWix(id, title) {
+      const wixConfigured = await checkWixStatus();
+      if (!wixConfigured) {
+        alert('⚠️ Wix API 未配置，請先在環境變數中設定 Wix 憑證');
+        return;
+      }
+
+      if (!confirm(`確定要將「${title}」發送到 Wix Blog 嗎？\n（將以草稿形式發布中文版本）`)) return;
+
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = '發送中...';
+      btn.disabled = true;
+
+      try {
+        const response = await fetch(`/send_to_wix/${id}`, {
+          method: 'POST'
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          alert(`✅ ${result.message}\n草稿 ID: ${result.draft_id}`);
+        } else {
+          alert('❌ 發送失敗：' + result.message);
+        }
+      } catch (error) {
+        alert('❌ 發生錯誤：' + error.message);
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    }
+
+    // 批量發送到 Wix
+    async function batchSendToWix() {
+      const wixConfigured = await checkWixStatus();
+      if (!wixConfigured) {
+        alert('⚠️ Wix API 未配置，請先在環境變數中設定 Wix 憑證');
+        return;
+      }
+
+      const checkboxes = document.querySelectorAll('.article-checkbox:checked');
+      const ids = Array.from(checkboxes).map(cb => parseInt(cb.dataset.id));
+
+      if (ids.length === 0) {
+        alert('⚠️ 請先選擇要發送的文章');
+        return;
+      }
+
+      if (!confirm(`確定要將 ${ids.length} 篇文章發送到 Wix Blog 嗎？\n（將以草稿形式發布中文版本）`)) {
+        return;
+      }
+
+      const btn = document.getElementById('batchWixBtn');
+      const originalText = btn.textContent;
+      btn.textContent = '發送中...';
+      btn.disabled = true;
+
+      try {
+        const response = await fetch('/batch_send_to_wix', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ article_ids: ids })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          let message = `${result.message}\n\n`;
+
+          // 顯示詳細結果
+          if (result.results && result.results.details) {
+            const successItems = result.results.details.filter(d => d.success);
+            const failedItems = result.results.details.filter(d => !d.success);
+
+            if (successItems.length > 0) {
+              message += '成功發送：\n';
+              successItems.forEach(item => {
+                message += `  - ${item.title}\n`;
+              });
+            }
+
+            if (failedItems.length > 0) {
+              message += '\n發送失敗：\n';
+              failedItems.forEach(item => {
+                message += `  - ID ${item.id}: ${item.message}\n`;
+              });
+            }
+          }
+
+          alert(message);
+        } else {
+          alert('❌ ' + result.message);
+        }
+      } catch (error) {
+        alert('❌ 發生錯誤：' + error.message);
+      } finally {
+        btn.textContent = originalText;
+        updateSelection();  // 重新啟用按鈕
+      }
+    }
+
+    // 頁面載入時檢查 Wix 狀態
+    document.addEventListener('DOMContentLoaded', function() {
+      checkWixStatus();
+    });
   </script>
 </body>
 </html>
