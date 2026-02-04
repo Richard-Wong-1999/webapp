@@ -121,6 +121,7 @@ class Config:
     WIX_CLIENT_SECRET = os.getenv("WIX_CLIENT_SECRET")
     WIX_INSTANCE_ID = os.getenv("WIX_INSTANCE_ID")
     WIX_REFRESH_TOKEN = os.getenv("WIX_REFRESH_TOKEN")
+    WIX_MEMBER_ID = os.getenv("WIX_MEMBER_ID")  # Blog Writer 的 Member ID
     WIX_API_BASE_URL = "https://www.wixapis.com"
 
     @classmethod

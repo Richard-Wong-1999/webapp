@@ -44,9 +44,10 @@ class HTMLToRicosConverter(HTMLParser):
             self.current_decorations = []
             return None
 
-        text_data = {"text": self.current_text}
+        # 使用 textData 格式（Wix Ricos v3 要求）
+        text_data = {"textData": {"text": self.current_text}}
         if self.current_decorations:
-            text_data["decorations"] = self.current_decorations.copy()
+            text_data["textData"]["decorations"] = self.current_decorations.copy()
 
         self.current_text = ""
         self.current_decorations = []
@@ -60,7 +61,9 @@ class HTMLToRicosConverter(HTMLParser):
             "nodes": []
         }
         if text_data:
-            node["nodes"].append({"type": "TEXT", **text_data})
+            text_node = {"type": "TEXT", "id": self._generate_node_id()}
+            text_node.update(text_data)
+            node["nodes"].append(text_node)
         return node
 
     def _create_heading_node(self, level: int, text_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -74,7 +77,9 @@ class HTMLToRicosConverter(HTMLParser):
             "nodes": []
         }
         if text_data:
-            node["nodes"].append({"type": "TEXT", **text_data})
+            text_node = {"type": "TEXT", "id": self._generate_node_id()}
+            text_node.update(text_data)
+            node["nodes"].append(text_node)
         return node
 
     def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]):
@@ -252,6 +257,7 @@ class WixClient:
         self.client_secret = Config.WIX_CLIENT_SECRET
         self.instance_id = Config.WIX_INSTANCE_ID
         self.refresh_token = Config.WIX_REFRESH_TOKEN
+        self.member_id = getattr(Config, 'WIX_MEMBER_ID', None)  # Blog Writer Member ID
         self.base_url = Config.WIX_API_BASE_URL
 
         self._access_token: Optional[str] = None
@@ -280,7 +286,7 @@ class WixClient:
 
         logger.info("正在刷新 Wix Access Token...")
 
-        url = "https://www.wixapis.com/oauth2/token"
+        url = "https://www.wixapis.com/oauth/access"
 
         payload = {
             "grant_type": "refresh_token",
@@ -395,6 +401,12 @@ class WixClient:
             "title": title,
             "richContent": ricos_content
         }
+
+        # 添加 memberId（Blog Writer ID，必填）
+        if self.member_id:
+            draft_post["memberId"] = self.member_id
+        else:
+            logger.warning("WIX_MEMBER_ID 未設定，草稿創建可能會失敗")
 
         if excerpt:
             draft_post["excerpt"] = excerpt
