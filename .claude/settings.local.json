@@ -19,7 +19,9 @@
       "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" add templates/manage_articles.html)",
       "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" commit -m \"Fix: sendToWix JS error - pass button element instead of using event.target\n\nThe onclick handler now passes ''this'' \\(button element\\) directly to the function,\nfixing the ''Cannot read properties of undefined \\(reading target\\)'' error.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\")",
       "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" add app.py services/wix_client.py)",
-      "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" commit -m \"Add Wix test endpoint and detailed logging\n\n- Add /api/wix/test endpoint to test with simple content\n- Add logging for memberId, instance_id, and payload structure\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\")"
+      "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" commit -m \"Add Wix test endpoint and detailed logging\n\n- Add /api/wix/test endpoint to test with simple content\n- Add logging for memberId, instance_id, and payload structure\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\")",
+      "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" add services/wix_client.py)",
+      "Bash(git -C \"C:\\\\Users\\\\user\\\\Desktop\\\\webapp\" commit -m \"Fix: Clean empty nodes from Ricos document\n\nEmpty nodes or nodes with empty text can cause Wix API 500 errors.\nAdded cleanup step to remove:\n- TEXT nodes with empty/whitespace-only content\n- Parent nodes with no valid children\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\")"
     ]
   }
 }
