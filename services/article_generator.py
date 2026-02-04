@@ -144,6 +144,17 @@ def build_article_prompt(
 3. **Body**: Key points and details, can use bullet points
 4. **Closing**: Summary or call to action
 
+## Rich Text 格式要求（重要）
+body 內容必須使用 HTML 格式輸出，包含以下標籤：
+- 使用 `<h2>` 作為主要小標題，`<h3>` 作為次級小標題
+- 使用 `<p>` 包裹每個段落
+- 使用 `<ul>` 和 `<li>` 製作無序列表
+- 使用 `<ol>` 和 `<li>` 製作有序列表
+- 使用 `<strong>` 強調重要內容
+- 使用 `<em>` 斜體強調
+- 不要使用 `<h1>` 標籤（標題已單獨提供）
+- 不要包含 `<html>`, `<head>`, `<body>` 等頁面結構標籤
+
 ## 寫作風格
 - 語調：專業但親切、客觀、關懷長者
 - 適合 Blog 閱讀：段落簡短、重點明確
@@ -180,13 +191,13 @@ def build_article_prompt(
   {{
     "zh": {{
       "title": "【範例】{main_keyword}新政策助長者安享晚年",
-      "body": "中文 Blog 正文內容...",
+      "body": "<p>開頭段落介紹主題重要性。</p><h2>重點一：政策內容</h2><p>詳細說明政策要點。</p><ul><li>要點一</li><li>要點二</li></ul><h2>重點二：服務細節</h2><p>服務詳情說明。</p><p><strong>總結</strong>：呼籲行動或重點回顧。</p>",
       "meta_title": "{main_keyword} | 香港長者服務資訊",
       "meta_description": "了解{main_keyword}的最新資訊，為長者提供優質服務支援。"
     }},
     "en": {{
       "title": "New Policy on {main_keyword} Benefits Elderly",
-      "body": "English blog body content...",
+      "body": "<p>Opening paragraph introducing the topic.</p><h2>Key Point 1: Policy Overview</h2><p>Detailed explanation of policy.</p><ul><li>Point one</li><li>Point two</li></ul><h2>Key Point 2: Service Details</h2><p>Service information.</p><p><strong>Summary</strong>: Call to action or key takeaways.</p>",
       "meta_title": "{main_keyword} | Hong Kong Elderly Services",
       "meta_description": "Learn about the latest {main_keyword} information."
     }},
