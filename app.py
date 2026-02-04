@@ -1317,12 +1317,8 @@ def api_test_progress():
 # ==========================================================
 # 路由：Wix Blog 整合
 # ==========================================================
-try:
-    from services.wix_client import wix_client
-    print("[WIX DEBUG] wix_client imported successfully", flush=True)
-except Exception as e:
-    print(f"[WIX DEBUG] Failed to import wix_client: {e}", flush=True)
-    wix_client = None
+from services.wix_client import wix_client
+logger.info("[WIX] wix_client 模組已載入")
 
 @app.route("/api/wix/status", methods=["GET"])
 def wix_api_status():
@@ -1340,8 +1336,7 @@ def send_to_wix(article_id):
 
     只發送中文版本的文章
     """
-    print(f"[WIX DEBUG] send_to_wix called with article_id={article_id}", flush=True)
-    logger.info(f"收到發送到 Wix 請求：article_id={article_id}")
+    logger.info(f"[WIX] 收到發送請求：article_id={article_id}")
 
     # 檢查 Wix API 配置
     if not wix_client.is_configured():
