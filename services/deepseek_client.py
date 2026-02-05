@@ -58,12 +58,18 @@ def call_deepseek(prompt_text: str, model: str = None, temperature: float = None
         if response.status_code == 200:
             res = response.json()
             content = res["choices"][0]["message"]["content"].strip()
+            finish_reason = res["choices"][0].get("finish_reason", "unknown")
             tokens_used = res.get("usage", {}).get("total_tokens", 0)
             prompt_tokens = res.get("usage", {}).get("prompt_tokens", 0)
             completion_tokens = res.get("usage", {}).get("completion_tokens", 0)
 
             logger.info(f"✅ [DeepSeek] API 呼叫成功：model={use_model}")
-            logger.info(f"📊 [DeepSeek] 響應統計：輸出={len(content)} 字元，tokens（prompt={prompt_tokens}, completion={completion_tokens}, total={tokens_used}）")
+            logger.info(f"📊 [DeepSeek] 響應統計：輸出={len(content)} 字元，tokens（prompt={prompt_tokens}, completion={completion_tokens}, total={tokens_used}），finish_reason={finish_reason}")
+
+            # 檢查是否因為 max_tokens 而被截斷
+            if finish_reason == "length":
+                logger.warning(f"⚠️ [DeepSeek] 輸出被截斷（finish_reason=length），可能需要增加 max_tokens（當前={max_tokens or Config.DEEPSEEK_MAX_TOKENS}）")
+
             return content
         else:
             logger.error(f"❌ [DeepSeek] API 錯誤：HTTP {response.status_code} - {response.text[:200]}")

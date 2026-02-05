@@ -21,7 +21,7 @@ class Config:
     DEEPSEEK_MODEL = "deepseek-chat"
     DEEPSEEK_TIMEOUT = 120
     DEEPSEEK_TEMPERATURE = 0.7
-    DEEPSEEK_MAX_TOKENS = 3500
+    DEEPSEEK_MAX_TOKENS = 8000  # Increased for article generation with HTML content
 
     # Poe API (OpenAI 相容格式)
     POE_API_KEY = os.getenv("POE_API_KEY")
