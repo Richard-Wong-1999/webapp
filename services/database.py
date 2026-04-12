@@ -180,6 +180,11 @@ def init_database():
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS llm_provider VARCHAR(50)")
         cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS llm_model VARCHAR(100)")
 
+        # 添加評分欄位
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS score INTEGER")
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS score_result TEXT")
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS score_prompt TEXT")
+
         # 添加索引以提升查詢效能
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_articles_created_at
@@ -430,3 +435,29 @@ def insert_article(conn, article_data: Dict) -> Dict:
     logger.info(f"✅ [Database] 文章插入成功：ID={article_id}，標題={title_preview}")
 
     return {"success": True, "id": article_id, "message": "文章已創建"}
+
+
+@with_db_connection
+def update_article_score(conn, article_id: int, score: int, score_result: str, score_prompt: str) -> Dict:
+    """更新文章評分"""
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE articles SET score = %s, score_result = %s, score_prompt = %s WHERE id = %s",
+        (score, score_result, score_prompt, article_id)
+    )
+    conn.commit()
+    cur.close()
+    return {"success": True}
+
+
+@with_db_connection
+def get_article_scores_by_ids(conn, article_ids: list) -> list:
+    """批次查詢文章評分"""
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute(
+        "SELECT id, score, score_result FROM articles WHERE id = ANY(%s)",
+        (article_ids,)
+    )
+    results = cur.fetchall()
+    cur.close()
+    return [dict(row) for row in results]

@@ -10,7 +10,9 @@ from .database import (
     get_article_by_id,
     delete_article,
     batch_delete_articles,
-    insert_article
+    insert_article,
+    update_article_score,
+    get_article_scores_by_ids
 )
 
 from .deepseek_client import call_deepseek
@@ -79,6 +81,8 @@ __all__ = [
     'delete_article',
     'batch_delete_articles',
     'insert_article',
+    'update_article_score',
+    'get_article_scores_by_ids',
     'call_deepseek',
     # Poe Client
     'call_poe',

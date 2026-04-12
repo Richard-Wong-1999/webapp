@@ -26,6 +26,7 @@ from services import (
     delete_article,
     batch_delete_articles,
     insert_article,
+    get_article_scores_by_ids,
     normalize_source,
     get_cached_keywords,
     compute_and_store_keywords,
@@ -443,6 +444,43 @@ def batch_delete_articles_route():
 
     except Exception as e:
         return jsonify({"success": False, "message": f"批量刪除失敗：{str(e)}"})
+
+
+@app.route("/api/article_scores", methods=["GET"])
+def api_article_scores():
+    """查詢文章評分狀態（輪詢用）"""
+    ids_param = request.args.get("ids", "")
+    if not ids_param:
+        return jsonify({"success": False, "message": "未提供文章 ID"}), 400
+
+    try:
+        article_ids = [int(x) for x in ids_param.split(",") if x.strip()]
+    except ValueError:
+        return jsonify({"success": False, "message": "無效的文章 ID"}), 400
+
+    results = get_article_scores_by_ids(article_ids)
+    if isinstance(results, dict) and not results.get("success", True):
+        return jsonify(results), 500
+
+    scores = {}
+    for row in results:
+        aid = str(row["id"])
+        if row["score"] is not None:
+            score_result = {}
+            if row.get("score_result"):
+                try:
+                    score_result = json.loads(row["score_result"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            scores[aid] = {
+                "score": row["score"],
+                "status": score_result.get("status", ""),
+                "deductions": score_result.get("deduction_log", [])
+            }
+        else:
+            scores[aid] = None
+
+    return jsonify({"success": True, "scores": scores})
 
 
 @app.route("/view_article/<int:article_id>")

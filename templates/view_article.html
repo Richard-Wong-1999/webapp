@@ -101,6 +101,61 @@
     </div>
     {% endif %}
 
+    <!-- AI 評分結果 -->
+    {% if article.score is not none %}
+    <div class="prompts-container">
+      <h2>🎯 AI 品質評分</h2>
+
+      <div class="score-summary-section">
+        <div class="score-big {% if article.score >= 90 %}score-pass{% else %}score-fail{% endif %}">
+          {{ article.score }}
+        </div>
+        <div class="score-status-label">
+          {% set score_data = article.score_result|fromjson if article.score_result else {} %}
+          {% if score_data is mapping and score_data.status %}
+            <span class="{% if score_data.status == 'APPROVED' %}status-approved{% else %}status-rejected{% endif %}">
+              {{ score_data.status }}
+            </span>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if score_data is mapping and score_data.deduction_log %}
+      <div class="deductions-detail">
+        <h4>扣分明細</h4>
+        {% for d in score_data.deduction_log %}
+        <div class="deduction-detail-item">
+          <span class="deduction-points">{{ d.deducted_points }}</span>
+          <span class="deduction-category">{{ d.category }}</span>
+          <span class="deduction-reason">{{ d.reason }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color: #28a745; margin-top: 10px;">滿分，無扣分項目。</p>
+      {% endif %}
+    </div>
+    {% elif article.score is none %}
+    <div class="prompts-container">
+      <h2>🎯 AI 品質評分</h2>
+      <p style="color: #999; font-style: italic;">計算中…</p>
+    </div>
+    {% endif %}
+
+    <!-- 評分 Prompt -->
+    {% if article.score_prompt %}
+    <div class="prompts-container">
+      <h2>🎯 AI 評分指令（Scoring Prompt）</h2>
+      <div class="prompt-item">
+        <h4>評分 Prompt</h4>
+        <button class="toggle-btn" onclick="togglePromptContent('score-prompt')">展開/收起</button>
+        <div id="score-prompt" class="prompt-content">
+          <pre>{{ article.score_prompt }}</pre>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <div style="margin-top: 30px;">
       <a href="/manage_articles" class="btn btn-primary">⬅️ 返回管理頁</a>
     </div>

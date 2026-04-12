@@ -11,6 +11,7 @@ from utils.logger import logger
 from utils.text_processing import build_reference_content_blocks_flexible
 from services.deepseek_client import call_deepseek
 from services.llm_client import call_llm
+from services.article_scorer import background_score_articles
 from prompts.article_prompt import build_article_prompt
 from services.keyword_extractor import (
     get_recent_articles_text,
@@ -713,6 +714,7 @@ def background_generate_articles_by_source(
     # 批次插入資料庫
     saved_count = 0
     db_failures = 0
+    articles_to_score = []
     for art in all_articles:
         try:
             logger.info(f"💾 正在儲存文章: {art.get('title_zh', '未命名')[:30]}...")
@@ -722,6 +724,12 @@ def background_generate_articles_by_source(
                 article_generation_progress.titles.append(title)
                 saved_count += 1
                 logger.info(f"✅ 已儲存文章: {title} (ID: {result.get('id', 'unknown')})")
+                # 收集待評分文章
+                articles_to_score.append((
+                    result["id"],
+                    art.get("keywords", ""),
+                    art.get("prompt_zh", "")
+                ))
             else:
                 db_failures += 1
                 error_msg = result.get('message', '未知錯誤')
@@ -731,6 +739,15 @@ def background_generate_articles_by_source(
             db_failures += 1
             logger.error(f"❌ 儲存文章時發生異常: {e}", exc_info=True)
             article_generation_progress.add_error(f"資料庫異常: {e}")
+
+    # 啟動背景評分
+    if articles_to_score:
+        logger.info(f"🎯 啟動背景評分: {len(articles_to_score)} 篇文章")
+        threading.Thread(
+            target=background_score_articles,
+            args=(articles_to_score, llm_provider, llm_model),
+            daemon=True
+        ).start()
 
     # 診斷摘要
     logger.info("=" * 60)
