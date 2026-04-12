@@ -13,48 +13,6 @@
     <!-- 左區：關鍵字分析 -->
     <div class="left-panel">
 
-      <!-- AI 模型設定區塊 -->
-      <div class="model-selector-section" style="background: linear-gradient(135deg, #2c4a7a 0%, #1f3a5f 100%);
-           border-radius: 8px; padding: 20px; margin-bottom: 20px; color: white;">
-
-        <h3 style="margin: 0 0 15px 0; font-size: 16px;">
-          🤖 AI 模型設定
-        </h3>
-
-        <div style="flex: 1; min-width: 200px;">
-          <label style="font-size: 13px; opacity: 0.9; display: block; margin-bottom: 5px;">選擇模型：</label>
-          <select id="modelSelect" onchange="changeModel()"
-                  style="width: 100%; padding: 10px; border-radius: 4px; border: none; font-size: 14px; cursor: pointer;">
-            <optgroup label="Poe - OpenAI GPT">
-              <option value="poe:gpt-5.2">GPT-5.2 — 最新旗艦，能力最強</option>
-              <option value="poe:gpt-5.2-instant">GPT-5.2 Instant — 極速版 GPT-5.2，速度最快</option>
-              <option value="poe:gpt-5-mini">GPT-5 Mini — 輕量版 GPT-5，快速便宜</option>
-              <option value="poe:gpt-4.1">GPT-4.1 — 穩定可靠，廣泛應用</option>
-              <option value="poe:gpt-4.1-mini">GPT-4.1 Mini — 輕量快速，適合簡單任務</option>
-            </optgroup>
-            <optgroup label="Poe - Google Gemini">
-              <option value="poe:gemini-3-flash">Gemini 3 Flash — 快速便宜，日常首選</option>
-            </optgroup>
-            <optgroup label="DeepSeek（官方 API - 最便宜）">
-              <option value="deepseek:deepseek-chat">DeepSeek Chat — 通用對話，性價比極高</option>
-            </optgroup>
-          </select>
-        </div>
-
-        <!-- 價格參考連結 -->
-        <div style="margin-top: 12px; font-size: 12px; display: flex; gap: 15px; flex-wrap: wrap;">
-          <a href="https://poe.com/api_pricing" target="_blank"
-             style="color: rgba(255,255,255,0.9); text-decoration: underline;">
-            📋 Poe API 價格表
-          </a>
-          <span style="opacity: 0.7;">|</span>
-          <a href="https://api-docs.deepseek.com/zh-cn/quick_start/pricing/" target="_blank"
-             style="color: rgba(255,255,255,0.9); text-decoration: underline;">
-            📊 DeepSeek 價格表
-          </a>
-        </div>
-      </div>
-
       <!-- SEO 關鍵字研究區塊 -->
       <div class="seo-research-section" id="seoResearchSection">
         <h2>🔍 SEO 關鍵字研究</h2>
@@ -274,52 +232,6 @@
   </div>
 
   <script>
-    // ============================================================
-    // LLM 模型切換
-    // ============================================================
-    async function changeModel() {
-      const select = document.getElementById('modelSelect');
-      const [provider, model] = select.value.split(':');
-
-      try {
-        const res = await fetch('/api/set_model', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider, model })
-        });
-
-        const data = await res.json();
-
-        if (!data.success) {
-          console.error('Failed to set model:', data.message);
-          alert('切換模型失敗: ' + data.message);
-        }
-      } catch (e) {
-        console.error('Error changing model:', e);
-        alert('切換模型時發生錯誤');
-      }
-    }
-
-    async function loadCurrentModel() {
-      try {
-        const res = await fetch('/api/get_model');
-        const data = await res.json();
-
-        const select = document.getElementById('modelSelect');
-        const value = `${data.provider}:${data.model}`;
-
-        // 設定下拉選單值
-        if (select) {
-          const optionExists = Array.from(select.options).some(opt => opt.value === value);
-          if (optionExists) {
-            select.value = value;
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to load current model:', e);
-      }
-    }
-
     // ============================================================
     // SEO API 狀態
     // ============================================================
@@ -1255,9 +1167,6 @@
     // 頁面載入
     // ============================================================
     window.addEventListener("load", async () => {
-      // 載入當前 LLM 模型設定
-      await loadCurrentModel();
-
       // 檢查 SEO API 狀態
       await checkSeoApiStatus();
 
