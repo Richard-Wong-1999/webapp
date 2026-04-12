@@ -63,17 +63,17 @@
             </div>
           </div>
           <div class="article-score" id="score-{{ article.id }}">
-            {% if article.score is not none %}
-              <span class="score-value {% if article.score >= 90 %}score-pass{% elif article.score >= 0 %}score-fail{% endif %}">{{ article.score }}</span>
+            {% if article.score is defined and article.score is not none %}
+              <span class="score-value {% if article.score >= 90 %}score-pass{% else %}score-fail{% endif %}">{{ article.score }}</span>
             {% else %}
               <span class="score-pending" data-article-id="{{ article.id }}">計算中…</span>
             {% endif %}
           </div>
         </div>
         <div class="article-deductions" id="deductions-{{ article.id }}">
-          {% if article.score is not none and article.score_result %}
+          {% if article.score is defined and article.score is not none and article.score_result is defined and article.score_result %}
             {% set result = article.score_result|fromjson %}
-            {% if result is mapping and result.deduction_log %}
+            {% if result is mapping and result.deduction_log is defined and result.deduction_log %}
               {% for d in result.deduction_log %}
               <div class="deduction-item">
                 <span class="deduction-points">{{ d.deducted_points }}</span>

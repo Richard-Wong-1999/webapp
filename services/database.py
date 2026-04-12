@@ -91,6 +91,25 @@ def with_db_connection(func):
     return wrapper
 
 
+def _ensure_columns():
+    """確保 articles 表包含所有必要欄位（冪等）"""
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor()
+        # 評分欄位
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS score INTEGER")
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS score_result TEXT")
+        cur.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS score_prompt TEXT")
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        logger.debug(f"_ensure_columns: {e}")
+    finally:
+        return_db_connection(conn)
+
+
 def ensure_database_initialized():
     """確保資料庫已初始化（包含所有必要的資料表）"""
     conn = get_db_connection()
@@ -128,6 +147,9 @@ def ensure_database_initialized():
         if missing_tables:
             logger.warning(f"⚠️ 缺少資料表：{missing_tables}，正在創建...")
             return init_database()
+
+        # 即使資料表已存在，也確保新增欄位已套用（ALTER TABLE IF NOT EXISTS 是冪等的）
+        _ensure_columns()
 
         return True
 
