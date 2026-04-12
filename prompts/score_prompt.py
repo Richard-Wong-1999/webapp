@@ -32,15 +32,12 @@ def build_score_prompt(keywords: str, reference_content: str, article_json: str)
 * [-5 分] 標籤未閉合：HTML 標籤（如 `<p>`, `<strong>` 等）有未閉合的語法錯誤。
 
 ---
-## 處理邏輯與輸出要求
+## 輸出要求
 
-- 若總分 >= 90：判定為 `APPROVED`。
-- 若總分 < 90：判定為 `REJECTED`，並必須在 `deduction_log` 中詳細列出扣了什麼分、為什麼扣分。
+你只需要輸出扣分明細，不需要計算總分或判定是否達標（系統會自動計算）。
 
 請直接輸出以下 JSON 格式（不要包含任何 Markdown 標記，如 ```json，直接輸出純 JSON 文本）：
 {{
-  "status": "APPROVED 或 REJECTED",
-  "final_score": 數字,
   "deduction_log": [
     {{
       "category": "扣分類別（如：致命紅線 / 品牌合規 / 格式排版）",
@@ -50,7 +47,7 @@ def build_score_prompt(keywords: str, reference_content: str, article_json: str)
   ]
 }}
 
-若滿分 100，deduction_log 為空陣列 []。
+若文章完全符合規範無任何違規，deduction_log 為空陣列 []。
 
 ---
 ## 待審核輸入資料

@@ -109,7 +109,13 @@ def score_single_article(article_id: int, keywords_str: str, prompt_zh: str,
             else:
                 raise ValueError("無法從回應中提取 JSON")
 
-        final_score = int(result.get("final_score", 0))
+        # 由程式計算總分，不信任 AI 輸出的 final_score
+        deductions = result.get("deduction_log", [])
+        total_deducted = sum(abs(d.get("deducted_points", 0)) for d in deductions)
+        final_score = max(0, 100 - total_deducted)
+        status = "APPROVED" if final_score >= 90 else "REJECTED"
+        result["final_score"] = final_score
+        result["status"] = status
         score_result_json = json.dumps(result, ensure_ascii=False)
 
     except Exception as e:
