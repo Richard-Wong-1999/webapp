@@ -10,6 +10,7 @@ from utils.logger import logger
 from utils.cache_manager import cache_manager
 from services.deepseek_client import call_deepseek
 from services.llm_client import call_llm
+from prompts.keyword_prompt import build_keyword_prompt
 
 
 def clear_article_cache(source: str = None):
@@ -104,7 +105,7 @@ def store_keywords(source: str, keywords: List[str], error: str = ""):
 
 
 def extract_keywords_from_deepseek(summaries: List[str]) -> List[str]:
-    """使用 GPT-5.2 提取關鍵字
+    """使用 DeepSeek 提取關鍵字
 
     Args:
         summaries: 文章摘要列表
@@ -117,39 +118,14 @@ def extract_keywords_from_deepseek(summaries: List[str]) -> List[str]:
         return []
 
     joined_text = "\n\n".join(summaries[:10])
-    prompt = (
-        "你是一位香港社會政策與福利新聞分析專家。\n\n"
-        "## 任務\n"
-        "請仔細閱讀以下新聞摘要，提取20個最能反映近期香港社會在長者相關領域的代表性關鍵詞。\n\n"
-        "## 領域範圍\n"
-        "長者照顧、安老政策、長者福利、銀髮經濟、醫療支援、長期護理\n\n"
-        "## 提取準則\n"
-	"1. 關鍵詞：一定要來自文章，並且不能修改它的用字，要和文章提供的完全一樣\n"
-        "2. 關鍵詞須屬於：政策概念、方案名稱、制度倡議、計劃措施或公共關注議題\n"
-        "3. 排除：純數字、日期時間、地名、機構名稱、人名\n"
-        "4. 長度：2至12個中文字的名詞詞組\n"
-        "5. 語言：繁體中文\n"
-        "6. 數量：正好20個關鍵詞\n\n"
-        "## 排序要求\n"
-        "**重要：請按照關鍵詞與「長者」的相關程度由高到低排序。**\n"
-        "- 直接與長者服務、安老政策相關的關鍵詞排在前面\n"
-        "- 間接相關（如一般醫療、社會福利）的關鍵詞排在後面\n\n"
-        "## 輸出格式\n"
-        "直接輸出關鍵詞，以中文逗號「，」分隔，不要有編號或其他文字。\n\n"
-        "## 輸出範例\n"
-        "長者社區照顧服務券，院舍照顧服務，長者生活津貼，安老服務統一評估，居家安老，...\n\n"
-        "---\n"
-        f"## 新聞摘要\n{joined_text}\n\n"
-        "---\n"
-        "請輸出20個關鍵詞（按長者相關程度排序）："
-    )
+    prompt = build_keyword_prompt(joined_text)
 
-    # 使用 GPT-5.2 進行關鍵字提取
-    output, metadata = call_llm(prompt, provider="poe", model="gpt-5.2")
+    # 使用 DeepSeek 進行關鍵字提取
+    output, metadata = call_llm(prompt, provider="deepseek", model="deepseek-chat")
     logger.info(f"🤖 關鍵字提取使用模型: {metadata.get('provider')}/{metadata.get('model')}")
 
     if not output:
-        logger.warning("⚠️ GPT-5.2 無回應或 API 失敗，返回空關鍵字列表")
+        logger.warning("⚠️ DeepSeek 無回應或 API 失敗，返回空關鍵字列表")
         return []
 
     keywords = [kw.strip() for kw in output.replace("，", ",").split(",") if kw.strip()]
