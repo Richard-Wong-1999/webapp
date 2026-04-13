@@ -12,6 +12,7 @@ from .database import (
     batch_delete_articles,
     insert_article,
     update_article_score,
+    update_article_content,
     get_article_scores_by_ids
 )
 
@@ -82,6 +83,7 @@ __all__ = [
     'batch_delete_articles',
     'insert_article',
     'update_article_score',
+    'update_article_content',
     'get_article_scores_by_ids',
     'call_deepseek',
     # Poe Client

@@ -27,11 +27,16 @@
         <button class="btn btn-warning" onclick="toggleSelectAll()">
           <span id="selectAllText">☑️ 全選</span>
         </button>
+        <button class="btn-select-pass" onclick="selectByScore('pass')">✅ 只選擇合格文章</button>
+        <button class="btn-select-fail" onclick="selectByScore('fail')">❌ 只選擇不合格文章</button>
         <button class="btn btn-danger" id="batchDeleteBtn" onclick="batchDelete()" disabled>
           🗑️ 批量刪除
         </button>
         <button class="btn btn-wix" id="batchWixBtn" onclick="batchSendToWix()" disabled>
           📤 批量傳送到 Wix
+        </button>
+        <button class="btn-regen" id="batchRegenBtn" onclick="batchRegenerate()" disabled>
+          🔄 批量文章重新生成
         </button>
         {% endif %}
       </div>
@@ -42,6 +47,19 @@
         <div class="wix-status" id="wixStatus"></div>
       </div>
     </div>
+
+    {% if articles %}
+    <div class="filter-bar">
+      <label class="filter-toggle">
+        <input type="checkbox" id="filterAll" checked onchange="applyFilter('all')">
+        <span>顯示所有文章</span>
+      </label>
+      <label class="filter-toggle">
+        <input type="checkbox" id="filterPass" onchange="applyFilter('pass')">
+        <span>只顯示合格文章</span>
+      </label>
+    </div>
+    {% endif %}
 
     {% if articles %}
     <div class="article-grid">
@@ -56,10 +74,18 @@
               <br>
               🏷️ ID: {{ article.id }}
             </div>
+            {% if article.keywords %}
+            <div class="article-keywords" id="keywords-{{ article.id }}">
+              {% for kw in article.keywords|fromjson %}
+                <span class="keyword-badge">{{ kw }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
             <div class="article-actions">
               <a href="/view_article/{{ article.id }}" class="btn btn-info">查看詳情</a>
               <button class="btn btn-wix" onclick="sendToWix(this, {{ article.id }}, '{{ article.title|e }}')">傳送到 Wix</button>
               <button class="btn btn-danger" onclick="deleteArticle({{ article.id }})">刪除</button>
+              <button class="btn-regen" id="regen-btn-{{ article.id }}" onclick="regenerateArticle({{ article.id }})">🔄 重新生成</button>
             </div>
           </div>
           <div class="article-score" id="score-{{ article.id }}">
@@ -115,6 +141,12 @@
       if (batchWixBtn) {
         batchWixBtn.disabled = count === 0;
       }
+
+      // 更新批量重新生成按鈕狀態
+      const batchRegenBtn = document.getElementById('batchRegenBtn');
+      if (batchRegenBtn) {
+        batchRegenBtn.disabled = count === 0;
+      }
       
       // 更新選擇信息
       const selectionInfo = document.getElementById('selectionInfo');
@@ -153,6 +185,163 @@
       updateSelection();
     }
     
+    // 按分數選擇文章
+    function selectByScore(type) {
+      const checkboxes = document.querySelectorAll('.article-checkbox');
+      checkboxes.forEach(cb => {
+        const card = document.getElementById(`card-${cb.dataset.id}`);
+        // 跳過被篩選隱藏的卡片
+        if (card.style.display === 'none') {
+          cb.checked = false;
+          return;
+        }
+        // 跳過正在重新生成的卡片
+        if (card.classList.contains('regenerating')) {
+          cb.checked = false;
+          return;
+        }
+        const scoreEl = card.querySelector('.score-value');
+        if (!scoreEl) {
+          cb.checked = false;
+          return;
+        }
+        const score = parseInt(scoreEl.textContent, 10);
+        if (isNaN(score)) {
+          cb.checked = false;
+          return;
+        }
+        if (type === 'pass') {
+          cb.checked = (score >= 90);
+        } else {
+          cb.checked = (score < 90);
+        }
+      });
+      updateSelection();
+    }
+
+    // 篩選文章
+    function applyFilter(mode) {
+      const filterAll = document.getElementById('filterAll');
+      const filterPass = document.getElementById('filterPass');
+
+      if (mode === 'all') {
+        filterAll.checked = true;
+        filterPass.checked = false;
+      } else {
+        filterPass.checked = true;
+        filterAll.checked = false;
+      }
+
+      const cards = document.querySelectorAll('.article-card');
+      cards.forEach(card => {
+        if (mode === 'all') {
+          card.style.display = '';
+        } else {
+          const scoreEl = card.querySelector('.score-value');
+          if (scoreEl) {
+            const score = parseInt(scoreEl.textContent, 10);
+            card.style.display = (score >= 90) ? '' : 'none';
+          } else {
+            card.style.display = 'none';
+          }
+        }
+      });
+
+      // 取消隱藏卡片的勾選
+      const checkboxes = document.querySelectorAll('.article-checkbox');
+      checkboxes.forEach(cb => {
+        const card = document.getElementById(`card-${cb.dataset.id}`);
+        if (card.style.display === 'none') {
+          cb.checked = false;
+        }
+      });
+      updateSelection();
+    }
+
+    function reapplyFilter() {
+      const filterPass = document.getElementById('filterPass');
+      if (filterPass && filterPass.checked) {
+        applyFilter('pass');
+      }
+    }
+
+    // 單篇重新生成
+    async function regenerateArticle(id) {
+      if (!confirm('確定要重新生成此文章嗎？原內容將被覆蓋。')) return;
+
+      const card = document.getElementById(`card-${id}`);
+      const btn = document.getElementById(`regen-btn-${id}`);
+      const scoreEl = document.getElementById(`score-${id}`);
+      const dedEl = document.getElementById(`deductions-${id}`);
+
+      card.classList.add('regenerating');
+      btn.textContent = '生成中…';
+      btn.disabled = true;
+      scoreEl.innerHTML = `<span class="score-pending" data-article-id="${id}">生成中…</span>`;
+      if (dedEl) dedEl.innerHTML = '';
+
+      try {
+        const res = await fetch(`/api/regenerate_article/${id}`, { method: 'POST' });
+        const data = await res.json();
+        if (!data.success) {
+          alert('❌ 重新生成失敗: ' + data.message);
+          card.classList.remove('regenerating');
+          btn.textContent = '🔄 重新生成';
+          btn.disabled = false;
+          return;
+        }
+        ensureScorePolling();
+      } catch (e) {
+        alert('❌ 發生錯誤: ' + e.message);
+        card.classList.remove('regenerating');
+        btn.textContent = '🔄 重新生成';
+        btn.disabled = false;
+      }
+    }
+
+    // 批量重新生成
+    async function batchRegenerate() {
+      const checkboxes = document.querySelectorAll('.article-checkbox:checked');
+      const ids = Array.from(checkboxes).map(cb => parseInt(cb.dataset.id));
+
+      if (ids.length === 0) {
+        alert('⚠️ 請先選擇要重新生成的文章');
+        return;
+      }
+
+      if (!confirm(`確定要重新生成 ${ids.length} 篇文章嗎？原內容將被覆蓋。`)) return;
+
+      ids.forEach(id => {
+        const card = document.getElementById(`card-${id}`);
+        const btn = document.getElementById(`regen-btn-${id}`);
+        const scoreEl = document.getElementById(`score-${id}`);
+        const dedEl = document.getElementById(`deductions-${id}`);
+
+        if (card) card.classList.add('regenerating');
+        if (btn) { btn.textContent = '生成中…'; btn.disabled = true; }
+        if (scoreEl) {
+          scoreEl.innerHTML = `<span class="score-pending" data-article-id="${id}">生成中…</span>`;
+        }
+        if (dedEl) dedEl.innerHTML = '';
+      });
+
+      try {
+        const res = await fetch('/api/batch_regenerate_articles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ article_ids: ids })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          alert('❌ 批量重新生成失敗: ' + data.message);
+          return;
+        }
+        ensureScorePolling();
+      } catch (e) {
+        alert('❌ 發生錯誤: ' + e.message);
+      }
+    }
+
     // 批量刪除
     async function batchDelete() {
       const checkboxes = document.querySelectorAll('.article-checkbox:checked');
@@ -343,18 +532,29 @@
       scorePollingInterval = setInterval(pollScores, 3000);
     }
 
+    function ensureScorePolling() {
+      if (!scorePollingInterval) {
+        scorePollingInterval = setInterval(pollScores, 3000);
+      }
+    }
+
     async function pollScores() {
-      const pending = document.querySelectorAll('.score-pending');
-      if (pending.length === 0) {
+      // 收集待評分和重新生成中的文章 ID
+      const pendingEls = document.querySelectorAll('.score-pending');
+      const regeneratingCards = document.querySelectorAll('.article-card.regenerating');
+
+      const idsFromPending = Array.from(pendingEls).map(el => el.dataset.articleId);
+      const idsFromRegen = Array.from(regeneratingCards).map(card => card.id.replace('card-', ''));
+      const allIds = [...new Set([...idsFromPending, ...idsFromRegen])];
+
+      if (allIds.length === 0) {
         clearInterval(scorePollingInterval);
+        scorePollingInterval = null;
         return;
       }
 
-      const ids = Array.from(pending).map(el => el.dataset.articleId);
-      if (ids.length === 0) return;
-
       try {
-        const res = await fetch(`/api/article_scores?ids=${ids.join(',')}`);
+        const res = await fetch(`/api/article_scores?ids=${allIds.join(',')}`);
         const data = await res.json();
         if (!data.success || !data.scores) return;
 
@@ -381,7 +581,54 @@
             });
             dedEl.innerHTML = html;
           }
+
+          // 如果是重新生成的卡片，更新標題和關鍵字
+          const card = document.getElementById(`card-${articleId}`);
+          if (card && card.classList.contains('regenerating')) {
+            // 更新標題
+            if (scoreData.title) {
+              const titleEl = card.querySelector('.article-title');
+              if (titleEl) titleEl.textContent = scoreData.title;
+            }
+            // 更新關鍵字
+            if (scoreData.keywords) {
+              let keywords = [];
+              try { keywords = JSON.parse(scoreData.keywords); } catch(e) {}
+              const kwEl = card.querySelector('.article-keywords') || document.getElementById(`keywords-${articleId}`);
+              if (kwEl && keywords.length > 0) {
+                kwEl.innerHTML = keywords.map(kw => `<span class="keyword-badge">${kw}</span>`).join('');
+              } else if (!kwEl && keywords.length > 0) {
+                const metaEl = card.querySelector('.article-meta');
+                if (metaEl) {
+                  const newKwDiv = document.createElement('div');
+                  newKwDiv.className = 'article-keywords';
+                  newKwDiv.id = `keywords-${articleId}`;
+                  newKwDiv.innerHTML = keywords.map(kw => `<span class="keyword-badge">${kw}</span>`).join('');
+                  metaEl.insertAdjacentElement('afterend', newKwDiv);
+                }
+              }
+            }
+            // 恢復卡片狀態
+            card.classList.remove('regenerating');
+            const btn = document.getElementById(`regen-btn-${articleId}`);
+            if (btn) {
+              btn.textContent = '🔄 重新生成';
+              btn.disabled = false;
+            }
+          }
+
+          // 分數變更提示（已勾選的卡片）
+          if (card) {
+            const cb = card.querySelector('.article-checkbox');
+            if (cb && cb.checked) {
+              card.classList.add('score-changed');
+              setTimeout(() => card.classList.remove('score-changed'), 3000);
+            }
+          }
         }
+
+        // 重新套用篩選
+        reapplyFilter();
       } catch (e) {
         console.error('Score polling error:', e);
       }

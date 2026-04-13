@@ -26,6 +26,8 @@ from services import (
     delete_article,
     batch_delete_articles,
     insert_article,
+    update_article_score,
+    update_article_content,
     get_article_scores_by_ids,
     normalize_source,
     get_cached_keywords,
@@ -475,12 +477,137 @@ def api_article_scores():
             scores[aid] = {
                 "score": row["score"],
                 "status": score_result.get("status", ""),
-                "deductions": score_result.get("deduction_log", [])
+                "deductions": score_result.get("deduction_log", []),
+                "title": row.get("title", ""),
+                "keywords": row.get("keywords", "")
             }
         else:
             scores[aid] = None
 
     return jsonify({"success": True, "scores": scores})
+
+
+def _regenerate_single_article(article_id, prompt_zh, llm_provider, llm_model):
+    """背景執行單篇文章重新生成（內部函式）"""
+    from services.article_scorer import score_single_article
+    from utils.logger import logger
+
+    try:
+        output, llm_metadata = call_llm(prompt_zh, provider=llm_provider, model=llm_model)
+        if not output:
+            logger.error(f"❌ 重新生成失敗 ID={article_id}: LLM 輸出為空")
+            return
+
+        # 解析 LLM 輸出
+        cleaned = output.strip()
+        if '```' in cleaned:
+            code_block_match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', cleaned)
+            if code_block_match:
+                cleaned = code_block_match.group(1).strip()
+            else:
+                cleaned = re.sub(r'```(?:json)?', '', cleaned)
+                cleaned = re.sub(r'```', '', cleaned)
+                cleaned = cleaned.strip()
+
+        cleaned = re.sub(r',(\s*[}\]])', r'\1', cleaned)
+        match = re.search(r'\[.*\]', cleaned, re.S)
+        parsed = json.loads(match.group(0)) if match else json.loads(cleaned)
+        if not isinstance(parsed, list):
+            parsed = [parsed]
+
+        item = parsed[0]
+        zh = item.get("zh") or {}
+        en = item.get("en") or {}
+
+        new_data = {
+            "title": (zh.get("title") or "").strip() or "未命名",
+            "body": (zh.get("body") or "").strip(),
+            "meta_title": (zh.get("meta_title") or "").strip(),
+            "meta_description": (zh.get("meta_description") or "").strip(),
+            "title_zh": (zh.get("title") or "").strip(),
+            "body_zh": (zh.get("body") or "").strip(),
+            "meta_title_zh": (zh.get("meta_title") or "").strip(),
+            "meta_description_zh": (zh.get("meta_description") or "").strip(),
+            "title_en": (en.get("title") or "").strip(),
+            "body_en": (en.get("body") or "").strip(),
+            "meta_title_en": (en.get("meta_title") or "").strip(),
+            "meta_description_en": (en.get("meta_description") or "").strip(),
+            "keywords": json.dumps(item.get("keywords", []), ensure_ascii=False),
+            "prompt_zh": prompt_zh,
+        }
+
+        update_article_content(article_id, new_data)
+        logger.info(f"✅ 文章 ID={article_id} 重新生成完成，開始重新評分")
+
+        # 重新評分
+        score_single_article(article_id, new_data["keywords"], prompt_zh, llm_provider, llm_model)
+
+    except Exception as e:
+        logger.error(f"❌ 重新生成錯誤 ID={article_id}: {e}", exc_info=True)
+
+
+@app.route("/api/regenerate_article/<int:article_id>", methods=["POST"])
+def regenerate_article_route(article_id):
+    """重新生成單篇文章"""
+    article = get_article_by_id(article_id)
+    if not article:
+        return jsonify({"success": False, "message": "找不到文章"}), 404
+
+    prompt_zh = article.get("prompt_zh")
+    if not prompt_zh:
+        return jsonify({"success": False, "message": "此文章沒有儲存生成 prompt，無法重新生成"}), 400
+
+    # 立即清除分數
+    update_article_score(article_id, None, None, None)
+
+    llm_provider = article.get("llm_provider") or Config.DEFAULT_PROVIDER
+    llm_model = article.get("llm_model") or Config.DEFAULT_MODEL
+
+    threading.Thread(
+        target=_regenerate_single_article,
+        args=(article_id, prompt_zh, llm_provider, llm_model),
+        daemon=True
+    ).start()
+
+    return jsonify({"success": True, "message": "重新生成已啟動"})
+
+
+@app.route("/api/batch_regenerate_articles", methods=["POST"])
+def batch_regenerate_articles_route():
+    """批量重新生成文章"""
+    data = request.get_json()
+    article_ids = data.get("article_ids", [])
+    if not article_ids:
+        return jsonify({"success": False, "message": "未選擇任何文章"}), 400
+
+    # 立即清除所有選中文章的分數
+    for aid in article_ids:
+        update_article_score(aid, None, None, None)
+
+    def background_batch_regenerate(aids):
+        from utils.logger import logger
+        logger.info(f"🔄 批量重新生成開始: 共 {len(aids)} 篇")
+        success_count = 0
+        for i, aid in enumerate(aids, 1):
+            article = get_article_by_id(aid)
+            if not article or not article.get("prompt_zh"):
+                logger.warning(f"⚠️ 跳過文章 ID={aid}: 無 prompt_zh")
+                continue
+            llm_provider = article.get("llm_provider") or Config.DEFAULT_PROVIDER
+            llm_model = article.get("llm_model") or Config.DEFAULT_MODEL
+            _regenerate_single_article(aid, article["prompt_zh"], llm_provider, llm_model)
+            success_count += 1
+            if i < len(aids):
+                time.sleep(2)
+        logger.info(f"🔄 批量重新生成完成: {success_count}/{len(aids)} 篇成功")
+
+    threading.Thread(
+        target=background_batch_regenerate,
+        args=(article_ids,),
+        daemon=True
+    ).start()
+
+    return jsonify({"success": True, "message": f"已啟動 {len(article_ids)} 篇文章的重新生成"})
 
 
 @app.route("/view_article/<int:article_id>")

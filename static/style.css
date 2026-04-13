@@ -296,6 +296,115 @@ input[type="checkbox"] {
   font-weight: 500;
 }
 
+/* 關鍵字標籤 */
+.article-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.keyword-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  background: #e8eef5;
+  border: 1px solid #d0d8e4;
+  border-radius: 12px;
+  font-size: 12px;
+  color: #1f3a5f;
+}
+
+/* 篩選列 */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin: 8px 0;
+}
+
+.filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 6px 12px;
+  border: 1px solid #d0d8e4;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+}
+
+.filter-toggle input:checked + span {
+  font-weight: 600;
+  color: var(--gov-primary);
+}
+
+/* 重新生成狀態 */
+.article-card.regenerating {
+  opacity: 0.6;
+}
+
+.article-card.regenerating .article-card-left > *:not(.article-actions) {
+  pointer-events: none;
+}
+
+/* 分數變更提示 */
+.article-card.score-changed {
+  animation: score-flash 0.5s ease 3;
+}
+
+@keyframes score-flash {
+  0%, 100% { border-color: #d0d8e4; }
+  50% { border-color: #ff9800; }
+}
+
+/* 選擇/重新生成按鈕 */
+.btn-regen {
+  background: #6c5ce7;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-regen:hover {
+  background: #5a4bd1;
+}
+
+.btn-regen:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-select-pass {
+  background: #28a745;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-select-pass:hover {
+  background: #218838;
+}
+
+.btn-select-fail {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-select-fail:hover {
+  background: #c82333;
+}
+
 /* ==========================================================
    View Article
    ========================================================== */

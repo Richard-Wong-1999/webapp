@@ -473,11 +473,45 @@ def update_article_score(conn, article_id: int, score: int, score_result: str, s
 
 
 @with_db_connection
+def update_article_content(conn, article_id: int, article_data: dict) -> Dict:
+    """重新生成後更新文章內容（同時清除舊分數）"""
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE articles SET
+            title = %s, body = %s, meta_title = %s, meta_description = %s,
+            title_zh = %s, body_zh = %s, meta_title_zh = %s, meta_description_zh = %s,
+            title_en = %s, body_en = %s, meta_title_en = %s, meta_description_en = %s,
+            keywords = %s, prompt_zh = %s,
+            score = NULL, score_result = NULL, score_prompt = NULL
+        WHERE id = %s
+    """, (
+        article_data.get("title", ""),
+        article_data.get("body", ""),
+        article_data.get("meta_title", ""),
+        article_data.get("meta_description", ""),
+        article_data.get("title_zh", ""),
+        article_data.get("body_zh", ""),
+        article_data.get("meta_title_zh", ""),
+        article_data.get("meta_description_zh", ""),
+        article_data.get("title_en", ""),
+        article_data.get("body_en", ""),
+        article_data.get("meta_title_en", ""),
+        article_data.get("meta_description_en", ""),
+        article_data.get("keywords", ""),
+        article_data.get("prompt_zh", ""),
+        article_id
+    ))
+    conn.commit()
+    cur.close()
+    return {"success": True}
+
+
+@with_db_connection
 def get_article_scores_by_ids(conn, article_ids: list) -> list:
-    """批次查詢文章評分"""
+    """批次查詢文章評分（含標題和關鍵字供重新生成後更新）"""
     cur = conn.cursor(cursor_factory=RealDictCursor)
     cur.execute(
-        "SELECT id, score, score_result FROM articles WHERE id = ANY(%s)",
+        "SELECT id, score, score_result, title, keywords FROM articles WHERE id = ANY(%s)",
         (article_ids,)
     )
     results = cur.fetchall()
