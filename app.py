@@ -482,7 +482,11 @@ def api_article_scores():
                 "keywords": row.get("keywords", "")
             }
         else:
-            scores[aid] = None
+            scores[aid] = {
+                "score": None,
+                "title": row.get("title", ""),
+                "keywords": row.get("keywords", "")
+            }
 
     return jsonify({"success": True, "scores": scores})
 

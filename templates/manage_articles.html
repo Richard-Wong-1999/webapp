@@ -568,7 +568,38 @@
         if (!data.success || !data.scores) return;
 
         for (const [articleId, scoreData] of Object.entries(data.scores)) {
-          if (scoreData === null) continue;
+          if (!scoreData) continue;
+
+          const card = document.getElementById(`card-${articleId}`);
+          const isRegenerating = card && card.classList.contains('regenerating');
+
+          // 重新生成中的卡片：即時更新標題和關鍵字（不等評分完成）
+          if (isRegenerating) {
+            if (scoreData.title) {
+              const titleEl = card.querySelector('.article-title');
+              if (titleEl) titleEl.textContent = scoreData.title;
+            }
+            if (scoreData.keywords) {
+              let keywords = [];
+              try { keywords = JSON.parse(scoreData.keywords); } catch(e) {}
+              const kwEl = card.querySelector('.article-keywords') || document.getElementById(`keywords-${articleId}`);
+              if (kwEl && keywords.length > 0) {
+                kwEl.innerHTML = keywords.map(kw => `<span class="keyword-badge">${kw}</span>`).join('');
+              } else if (!kwEl && keywords.length > 0) {
+                const metaEl = card.querySelector('.article-meta');
+                if (metaEl) {
+                  const newKwDiv = document.createElement('div');
+                  newKwDiv.className = 'article-keywords';
+                  newKwDiv.id = `keywords-${articleId}`;
+                  newKwDiv.innerHTML = keywords.map(kw => `<span class="keyword-badge">${kw}</span>`).join('');
+                  metaEl.insertAdjacentElement('afterend', newKwDiv);
+                }
+              }
+            }
+          }
+
+          // 分數尚未出來，跳過分數/扣分更新
+          if (scoreData.score === null || scoreData.score === undefined) continue;
 
           // 更新分數顯示
           const scoreEl = document.getElementById(`score-${articleId}`);
@@ -591,33 +622,8 @@
             dedEl.innerHTML = html;
           }
 
-          // 如果是重新生成的卡片，更新標題和關鍵字
-          const card = document.getElementById(`card-${articleId}`);
-          if (card && card.classList.contains('regenerating')) {
-            // 更新標題
-            if (scoreData.title) {
-              const titleEl = card.querySelector('.article-title');
-              if (titleEl) titleEl.textContent = scoreData.title;
-            }
-            // 更新關鍵字
-            if (scoreData.keywords) {
-              let keywords = [];
-              try { keywords = JSON.parse(scoreData.keywords); } catch(e) {}
-              const kwEl = card.querySelector('.article-keywords') || document.getElementById(`keywords-${articleId}`);
-              if (kwEl && keywords.length > 0) {
-                kwEl.innerHTML = keywords.map(kw => `<span class="keyword-badge">${kw}</span>`).join('');
-              } else if (!kwEl && keywords.length > 0) {
-                const metaEl = card.querySelector('.article-meta');
-                if (metaEl) {
-                  const newKwDiv = document.createElement('div');
-                  newKwDiv.className = 'article-keywords';
-                  newKwDiv.id = `keywords-${articleId}`;
-                  newKwDiv.innerHTML = keywords.map(kw => `<span class="keyword-badge">${kw}</span>`).join('');
-                  metaEl.insertAdjacentElement('afterend', newKwDiv);
-                }
-              }
-            }
-            // 恢復卡片狀態
+          // 評分完成：恢復重新生成卡片狀態
+          if (isRegenerating) {
             card.classList.remove('regenerating');
             const btn = document.getElementById(`regen-btn-${articleId}`);
             if (btn) {
