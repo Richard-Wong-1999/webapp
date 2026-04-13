@@ -357,52 +357,27 @@ input[type="checkbox"] {
   50% { border-color: #ff9800; }
 }
 
-/* 選擇/重新生成按鈕 */
+/* 重新生成按鈕（功能藍，與一般操作區分） */
 .btn-regen {
-  background: #6c5ce7;
-  color: white;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
+  background: var(--gov-accent);
+}
+.btn-regen:hover:not(:disabled) {
+  background: #1f5a9a;
 }
 
-.btn-regen:hover {
-  background: #5a4bd1;
-}
-
-.btn-regen:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
+/* 選擇合格/不合格按鈕（統一 gov-primary） */
 .btn-select-pass {
-  background: #28a745;
-  color: white;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
+  background: var(--gov-primary);
 }
-
-.btn-select-pass:hover {
-  background: #218838;
+.btn-select-pass:hover:not(:disabled) {
+  background: #162c49;
 }
 
 .btn-select-fail {
-  background: #dc3545;
-  color: white;
-  border: none;
-  padding: 6px 14px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
+  background: var(--gov-primary);
 }
-
-.btn-select-fail:hover {
-  background: #c82333;
+.btn-select-fail:hover:not(:disabled) {
+  background: #162c49;
 }
 
 /* ==========================================================
