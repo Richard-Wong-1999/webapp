@@ -58,6 +58,10 @@
         <input type="checkbox" id="filterPass" onchange="applyFilter('pass')">
         <span>只顯示合格文章</span>
       </label>
+      <label class="filter-toggle">
+        <input type="checkbox" id="filterFail" onchange="applyFilter('fail')">
+        <span>只顯示不合格文章</span>
+      </label>
     </div>
     {% endif %}
 
@@ -223,14 +227,12 @@
     function applyFilter(mode) {
       const filterAll = document.getElementById('filterAll');
       const filterPass = document.getElementById('filterPass');
+      const filterFail = document.getElementById('filterFail');
 
-      if (mode === 'all') {
-        filterAll.checked = true;
-        filterPass.checked = false;
-      } else {
-        filterPass.checked = true;
-        filterAll.checked = false;
-      }
+      // 互斥：只有選中的那個打勾
+      filterAll.checked = (mode === 'all');
+      filterPass.checked = (mode === 'pass');
+      filterFail.checked = (mode === 'fail');
 
       const cards = document.querySelectorAll('.article-card');
       cards.forEach(card => {
@@ -240,7 +242,11 @@
           const scoreEl = card.querySelector('.score-value');
           if (scoreEl) {
             const score = parseInt(scoreEl.textContent, 10);
-            card.style.display = (score >= 90) ? '' : 'none';
+            if (mode === 'pass') {
+              card.style.display = (score >= 90) ? '' : 'none';
+            } else {
+              card.style.display = (score < 90) ? '' : 'none';
+            }
           } else {
             card.style.display = 'none';
           }
@@ -260,8 +266,11 @@
 
     function reapplyFilter() {
       const filterPass = document.getElementById('filterPass');
+      const filterFail = document.getElementById('filterFail');
       if (filterPass && filterPass.checked) {
         applyFilter('pass');
+      } else if (filterFail && filterFail.checked) {
+        applyFilter('fail');
       }
     }
 
