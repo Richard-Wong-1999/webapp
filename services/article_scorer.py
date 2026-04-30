@@ -59,8 +59,8 @@ def build_article_json_for_scoring(article: dict) -> str:
 def score_single_article(article_id: int, keywords_str: str, prompt_zh: str,
                           llm_provider: str = None, llm_model: str = None) -> dict:
     """對單篇文章進行評分"""
-    llm_provider = llm_provider or Config.SCORING_PROVIDER
-    llm_model = llm_model or Config.SCORING_MODEL
+    llm_provider = llm_provider or Config.DEFAULT_PROVIDER
+    llm_model = llm_model or Config.DEFAULT_MODEL
 
     logger.info(f"🎯 開始評分文章 ID={article_id}")
 

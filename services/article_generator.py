@@ -13,15 +13,6 @@ from services.deepseek_client import call_deepseek
 from services.llm_client import call_llm
 from services.article_scorer import background_score_articles
 from prompts.article_prompt import build_article_prompt
-from prompts.article_prompt_formal import build_article_prompt_formal
-from prompts.article_prompt_warm import build_article_prompt_warm
-from prompts.article_prompt_brief import build_article_prompt_brief
-
-_TONE_BUILDERS = {
-    "formal": build_article_prompt_formal,
-    "warm":   build_article_prompt_warm,
-    "brief":  build_article_prompt_brief,
-}
 from services.keyword_extractor import (
     get_recent_articles_text,
     get_relevant_reference_blocks,
@@ -374,8 +365,7 @@ def generate_single_article_by_source(
     fallback_content: str,
     actual_source: str = None,
     llm_provider: str = None,
-    llm_model: str = None,
-    tone: str = "formal"
+    llm_model: str = None
 ) -> tuple:
     """根據關鍵字來源生成文章
 
@@ -488,9 +478,8 @@ def generate_single_article_by_source(
 
         reference_section_title = "🌐 競爭對手深度分析"
 
-    # 生成 prompt（根據語調選擇對應模板）
-    prompt_builder = _TONE_BUILDERS.get(tone, build_article_prompt_formal)
-    prompt_zh = prompt_builder(
+    # 生成 prompt（使用統一模板）
+    prompt_zh = build_article_prompt(
         main_keyword=main_keyword,
         reference_content=reference_content,
         reference_section_title=reference_section_title,
@@ -524,8 +513,7 @@ def background_generate_articles_by_source(
     keyword_source: str = "swd",
     keyword_sources_map: Dict[str, str] = None,
     llm_provider: str = None,
-    llm_model: str = None,
-    tone: str = "formal"
+    llm_model: str = None
 ):
     """背景生成文章（根據關鍵字來源選擇參考資料）
 
@@ -608,8 +596,7 @@ def background_generate_articles_by_source(
                     fallback_content,
                     actual_source,
                     llm_provider,
-                    llm_model,
-                    tone
+                    llm_model
                 )
             )
 
