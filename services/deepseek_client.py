@@ -57,7 +57,7 @@ def call_deepseek(prompt_text: str, model: str = None, temperature: float = None
 
         if response.status_code == 200:
             res = response.json()
-            content = res["choices"][0]["message"]["content"].strip()
+            content = (res["choices"][0]["message"].get("content") or "").strip()
             finish_reason = res["choices"][0].get("finish_reason", "unknown")
             tokens_used = res.get("usage", {}).get("total_tokens", 0)
             prompt_tokens = res.get("usage", {}).get("prompt_tokens", 0)

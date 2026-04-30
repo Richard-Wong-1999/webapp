@@ -29,4 +29,4 @@ DEFAULT_PROVIDER     = "deepseek"
 DEFAULT_MODEL        = "deepseek-v4-pro"    # 文章生成
 KEYWORD_MODEL        = "deepseek-v4-flash"  # 關鍵字提取
 DOMAIN_SUMMARY_MODEL = "deepseek-v4-flash"  # SEO 結構化摘要
-SCORING_MODEL        = "deepseek-v4-pro"    # 文章評分
+SCORING_MODEL        = "deepseek-v4-flash"  # 文章評分
