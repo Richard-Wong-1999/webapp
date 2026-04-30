@@ -18,7 +18,7 @@ class Config:
     # DeepSeek API
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
     DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
-    DEEPSEEK_MODEL = "deepseek-chat"
+    DEEPSEEK_MODEL = "deepseek-v4-pro"
     DEEPSEEK_TIMEOUT = 120
     DEEPSEEK_TEMPERATURE = 0.7
     DEEPSEEK_MAX_TOKENS = 8000  # Increased for article generation with HTML content
@@ -34,13 +34,13 @@ class Config:
             "api_url": "https://api.deepseek.com/chat/completions",
             "api_key_env": "DEEPSEEK_API_KEY",
             "models": {
-                "deepseek-chat": {"name": "DeepSeek Chat", "desc": "通用對話，性價比極高", "has_thinking": False}
+                "deepseek-v4-pro": {"name": "DeepSeek V4 Pro", "desc": "通用對話，性價比極高", "has_thinking": False}
             }
         }
     }
 
     DEFAULT_PROVIDER = "deepseek"
-    DEFAULT_MODEL = "deepseek-chat"
+    DEFAULT_MODEL = "deepseek-v4-pro"
 
     # Crawler directories
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -99,7 +99,7 @@ class Config:
     HIERARCHICAL_SUMMARY_ENABLED = True       # 是否啟用分層摘要
     HIERARCHICAL_SUMMARY_THRESHOLD = 5        # 超過多少頁才啟用分層摘要
     DOMAIN_SUMMARY_MAX_LENGTH = 800           # 每個域名摘要最大長度（字）
-    DOMAIN_SUMMARY_MODEL = "deepseek-chat"    # 摘要用的模型
+    DOMAIN_SUMMARY_MODEL = "deepseek-v4-pro"    # 摘要用的模型
     DOMAIN_SUMMARY_MAX_WORKERS = 3            # 並行生成摘要的最大線程數
     DOMAIN_SUMMARY_CACHE_TTL = 21600          # 域名摘要快取 TTL（6小時，與 SERP 快取相同）
 

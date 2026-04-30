@@ -1043,7 +1043,7 @@ def api_debug_test_generate():
     import re
 
     test_model = request.args.get("model", "o4-mini")
-    provider = "poe" if test_model != "deepseek-chat" else "deepseek"
+    provider = "poe" if test_model != "deepseek-v4-pro" else "deepseek"
 
     result = {
         "provider": provider,

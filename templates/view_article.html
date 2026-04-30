@@ -15,7 +15,7 @@
       <div class="meta-item">📅 <strong>建立時間：</strong>{{ article.created_at|to_hk_time('%Y-%m-%d %H:%M:%S') }} (HKT)</div>
       <div class="meta-item">🏷️ <strong>批次：</strong>{{ article.timestamp or '未分類' }}</div>
       {% if article.llm_provider or article.llm_model %}
-      <div class="meta-item">🤖 <strong>AI 模型：</strong>{{ article.llm_provider or 'deepseek' }} / {{ article.llm_model or 'deepseek-chat' }}</div>
+      <div class="meta-item">🤖 <strong>AI 模型：</strong>{{ article.llm_provider or 'deepseek' }} / {{ article.llm_model or 'deepseek-v4-pro' }}</div>
       {% endif %}
     </div>
 
