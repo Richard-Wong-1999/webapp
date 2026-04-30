@@ -121,7 +121,7 @@ def extract_keywords_from_deepseek(summaries: List[str]) -> List[str]:
     prompt = build_keyword_prompt(joined_text)
 
     # 使用 DeepSeek 進行關鍵字提取
-    output, metadata = call_llm(prompt, provider="deepseek", model="deepseek-v4-pro")
+    output, metadata = call_llm(prompt, provider="deepseek", model=Config.KEYWORD_MODEL)
     logger.info(f"🤖 關鍵字提取使用模型: {metadata.get('provider')}/{metadata.get('model')}")
 
     if not output:

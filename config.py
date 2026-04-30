@@ -34,13 +34,15 @@ class Config:
             "api_url": "https://api.deepseek.com/chat/completions",
             "api_key_env": "DEEPSEEK_API_KEY",
             "models": {
-                "deepseek-v4-pro": {"name": "DeepSeek V4 Pro", "desc": "通用對話，性價比極高", "has_thinking": False}
+                "deepseek-v4-pro": {"name": "DeepSeek V4 Pro", "desc": "通用對話，性價比極高", "has_thinking": False},
+                "deepseek-v4-flash": {"name": "DeepSeek V4 Flash", "desc": "快速輕量，適合關鍵字提取", "has_thinking": False}
             }
         }
     }
 
     DEFAULT_PROVIDER = "deepseek"
     DEFAULT_MODEL = "deepseek-v4-pro"
+    KEYWORD_MODEL = "deepseek-v4-flash"
 
     # Crawler directories
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
