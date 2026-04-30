@@ -1,5 +1,13 @@
 import os
 from dotenv import load_dotenv
+from prompts.llm_models import (
+    LLM_PROVIDERS as _LLM_PROVIDERS,
+    DEFAULT_PROVIDER as _DEFAULT_PROVIDER,
+    DEFAULT_MODEL as _DEFAULT_MODEL,
+    KEYWORD_MODEL as _KEYWORD_MODEL,
+    DOMAIN_SUMMARY_MODEL as _DOMAIN_SUMMARY_MODEL,
+    SCORING_MODEL as _SCORING_MODEL,
+)
 
 load_dotenv()
 
@@ -18,7 +26,7 @@ class Config:
     # DeepSeek API
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
     DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
-    DEEPSEEK_MODEL = "deepseek-chat"
+    DEEPSEEK_MODEL = _DEFAULT_MODEL
     DEEPSEEK_TIMEOUT = 120
     DEEPSEEK_TEMPERATURE = 0.7
     DEEPSEEK_MAX_TOKENS = 8000  # Increased for article generation with HTML content
@@ -28,19 +36,12 @@ class Config:
     POE_API_URL = "https://api.poe.com/v1/chat/completions"
 
     # LLM 模型配置
-    LLM_PROVIDERS = {
-        "deepseek": {
-            "name": "DeepSeek（官方）",
-            "api_url": "https://api.deepseek.com/chat/completions",
-            "api_key_env": "DEEPSEEK_API_KEY",
-            "models": {
-                "deepseek-chat": {"name": "DeepSeek Chat", "desc": "通用對話，性價比極高", "has_thinking": False}
-            }
-        }
-    }
+    LLM_PROVIDERS = _LLM_PROVIDERS
 
-    DEFAULT_PROVIDER = "deepseek"
-    DEFAULT_MODEL = "deepseek-chat"
+    DEFAULT_PROVIDER = _DEFAULT_PROVIDER
+    DEFAULT_MODEL = _DEFAULT_MODEL
+    KEYWORD_MODEL = _KEYWORD_MODEL
+    SCORING_MODEL = _SCORING_MODEL
 
     # Crawler directories
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -99,7 +100,7 @@ class Config:
     HIERARCHICAL_SUMMARY_ENABLED = True       # 是否啟用分層摘要
     HIERARCHICAL_SUMMARY_THRESHOLD = 5        # 超過多少頁才啟用分層摘要
     DOMAIN_SUMMARY_MAX_LENGTH = 800           # 每個域名摘要最大長度（字）
-    DOMAIN_SUMMARY_MODEL = "deepseek-chat"    # 摘要用的模型
+    DOMAIN_SUMMARY_MODEL = _DOMAIN_SUMMARY_MODEL    # 摘要用的模型
     DOMAIN_SUMMARY_MAX_WORKERS = 3            # 並行生成摘要的最大線程數
     DOMAIN_SUMMARY_CACHE_TTL = 21600          # 域名摘要快取 TTL（6小時，與 SERP 快取相同）
 
