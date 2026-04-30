@@ -1111,7 +1111,7 @@ def summarize_domain_content(
     Returns:
         生成的摘要文本
     """
-    from services.deepseek_client import call_deepseek
+    from services.llm_client import call_llm
 
     # 檢查快取
     cached = get_cached_domain_summary(keyword, domain)
@@ -1141,7 +1141,7 @@ def summarize_domain_content(
     prompt = build_seo_domain_prompt(keyword, domain, page_contents)
 
     try:
-        summary = call_deepseek(prompt)
+        summary, _ = call_llm(prompt, provider="deepseek", model=Config.KEYWORD_MODEL)
         if summary:
             # 儲存到快取
             store_domain_summary(keyword, domain, summary, urls)

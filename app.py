@@ -221,7 +221,9 @@ def keywords():
     if not result:
         result = compute_and_store_keywords(source=source, days=30)
 
-    return render_template("keywords.html", keywords=result, source=source)
+    from prompts.llm_models import get_ui_models
+    return render_template("keywords.html", keywords=result, source=source,
+                           ui_models=get_ui_models())
 
 
 @app.route("/keywords_json", methods=["GET"])
@@ -354,15 +356,32 @@ def generate_articles():
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    llm_provider = Config.DEFAULT_PROVIDER
-    llm_model = Config.DEFAULT_MODEL
+    # 解析模型選擇（格式：provider:model）
+    llm_model_combined = request.form.get("llm_model_combined", "")
+    if ":" in llm_model_combined:
+        llm_provider, llm_model = llm_model_combined.split(":", 1)
+        if (llm_provider not in Config.LLM_PROVIDERS or
+                llm_model not in Config.LLM_PROVIDERS[llm_provider].get("models", {})):
+            logger.warning(f"⚠️ 無效的模型選擇 '{llm_model_combined}'，使用預設值")
+            llm_provider = Config.DEFAULT_PROVIDER
+            llm_model    = Config.DEFAULT_MODEL
+    else:
+        llm_provider = Config.DEFAULT_PROVIDER
+        llm_model    = Config.DEFAULT_MODEL
+
+    # 解析語調選擇
+    tone = request.form.get("tone", "formal")
+    if tone not in ("formal", "warm", "brief"):
+        tone = "formal"
 
     logger.info(f"🤖 使用 LLM 模型: {llm_provider}/{llm_model}")
+    logger.info(f"🎨 文章語調: {tone}")
 
     # 使用新的根據來源生成函數
     threading.Thread(
         target=background_generate_articles_by_source,
-        args=(selected_keywords, timestamp, keyword_source, keyword_sources_map, llm_provider, llm_model)
+        args=(selected_keywords, timestamp, keyword_source, keyword_sources_map, llm_provider, llm_model),
+        kwargs={"tone": tone}
     ).start()
 
     return render_template("generate.html")

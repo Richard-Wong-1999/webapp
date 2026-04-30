@@ -131,6 +131,43 @@
         <input type="hidden" name="keyword_source" id="keywordSourceInput" value="mixed">
         <input type="hidden" name="keyword_sources_json" id="keywordSourcesJson" value="{}">
 
+        <!-- 生成選項：模型與語調 -->
+        <div style="background: var(--gov-secondary); border: 1px solid var(--gov-border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
+
+          <!-- 模型選擇 -->
+          <div style="flex: 1; min-width: 200px;">
+            <label for="modelSelect" style="display: block; font-size: 13px; font-weight: 600; color: var(--gov-primary); margin-bottom: 6px;">🤖 AI 模型</label>
+            <select id="modelSelect" name="llm_model_combined" style="width: 100%; padding: 7px 10px; border: 1px solid var(--gov-border); border-radius: var(--radius); font-size: 13px; background: white; color: var(--text-main);">
+              {% set ns = namespace(current_group='') %}
+              {% for m in ui_models %}
+                {% if m.group != ns.current_group %}
+                  {% if ns.current_group != '' %}</optgroup>{% endif %}
+                  <optgroup label="{{ m.group }}">
+                  {% set ns.current_group = m.group %}
+                {% endif %}
+                <option value="{{ m.value }}">{{ m.label }} — {{ m.desc }}</option>
+              {% endfor %}
+              {% if ns.current_group != '' %}</optgroup>{% endif %}
+            </select>
+          </div>
+
+          <!-- 語調選擇 -->
+          <div style="flex: 1; min-width: 200px;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--gov-primary); margin-bottom: 6px;">✍️ 文章語調</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <label id="toneLabelFormal" style="display: flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px solid var(--gov-border); border-radius: var(--radius); background: white; cursor: pointer; font-size: 13px; transition: background 0.15s, border-color 0.15s;">
+                <input type="radio" name="tone" value="formal" checked style="accent-color: var(--gov-accent);" onchange="highlightTone()"> 正式版
+              </label>
+              <label id="toneLabelWarm" style="display: flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px solid var(--gov-border); border-radius: var(--radius); background: white; cursor: pointer; font-size: 13px; transition: background 0.15s, border-color 0.15s;">
+                <input type="radio" name="tone" value="warm" style="accent-color: var(--gov-accent);" onchange="highlightTone()"> 溫情版
+              </label>
+              <label id="toneLabelBrief" style="display: flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1px solid var(--gov-border); border-radius: var(--radius); background: white; cursor: pointer; font-size: 13px; transition: background 0.15s, border-color 0.15s;">
+                <input type="radio" name="tone" value="brief" style="accent-color: var(--gov-accent);" onchange="highlightTone()"> 簡短版
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div id="keywordArea">
           <p id="keywordLoading" style="color: #666; font-style: italic;">正在載入關鍵字...</p>
         </div>
@@ -1268,6 +1305,20 @@
         document.getElementById('keywordSourceInput').value = 'mixed';
         document.getElementById('keywordSourcesJson').value = JSON.stringify(sourcesMap);
       });
+
+      // 語調按鈕高亮
+      function highlightTone() {
+        ['formal', 'warm', 'brief'].forEach(t => {
+          const label = document.getElementById('toneLabel' + t.charAt(0).toUpperCase() + t.slice(1));
+          if (!label) return;
+          const radio = label.querySelector('input[type="radio"]');
+          label.style.background   = radio.checked ? 'var(--gov-secondary)' : 'white';
+          label.style.borderColor  = radio.checked ? 'var(--gov-accent)'    : 'var(--gov-border)';
+          label.style.fontWeight   = radio.checked ? '600'                  : 'normal';
+        });
+      }
+
+      highlightTone();
     });
   </script>
 </body>

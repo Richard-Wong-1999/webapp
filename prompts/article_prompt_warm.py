@@ -1,25 +1,13 @@
 import json
 
 
-def build_article_prompt(
+def build_article_prompt_warm(
     main_keyword: str,
     reference_content: str,
     reference_section_title: str = "參考新聞資料",
     seo_context: str = "",
     chosen_keywords: list = None
 ) -> str:
-    """構建優化後的 Blog 文章生成 Prompt
-
-    Args:
-        main_keyword: 主要關鍵詞
-        reference_content: 參考資料內容
-        reference_section_title: 參考資料區塊標題
-        seo_context: SEO 分析數據（可選）
-        chosen_keywords: 關鍵詞列表（可選，預設使用 main_keyword）
-
-    Returns:
-        優化後的 Prompt 字串
-    """
     chosen_keywords = chosen_keywords or [main_keyword]
     keywords_json = json.dumps(chosen_keywords, ensure_ascii=False)
 
@@ -94,11 +82,11 @@ body 內容必須使用 HTML 格式輸出，包含以下標籤：
 - 不要使用 `<h1>` 標籤（標題已單獨提供）
 - 不要包含 `<html>`, `<head>`, `<body>` 等頁面結構標籤
 
-## 寫作風格
-- 語調：專業但親切、客觀、關懷長者
-- 適合 Blog 閱讀：段落簡短、重點明確
-- 避免：過度推銷、誇張用語、政治敏感內容
-- 適用對象：關心長者服務的香港市民、照顧者、專業人士
+## 文章語調（溫情版）
+- 語調：溫暖親切、富有同理心、以長者和照顧者的情感共鳴為核心
+- 句式：多用第二人稱「您」，以故事性或對話性開頭拉近距離
+- 用詞：包含關懷性詞彙（陪伴、支持、共同走過、安心），避免冰冷術語
+- 適合場合：家庭讀者、照顧者、初次接觸長者服務的人士
 
 ## SEO 優化要求
 1. **標題**：關鍵詞靠前，具吸引力，適合搜尋引擎
